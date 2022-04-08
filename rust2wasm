@@ -1,0 +1,25 @@
+#!/bin/zx
+
+let args = process.argv;
+console.log(args);
+
+if (args.length != 4) {
+    console.log(`Usage:
+./rust2wasm path-to-source.rs`);
+    process.exit(1);
+}
+
+import 'path';
+
+let filePath = path.resolve(args[3]);
+
+if (!filePath.endsWith('.rs')) {
+    console.log('Only a single *.rs file is supported.');
+    process.exit(1);
+}
+
+let outputFile = filePath.substring(0, filePath.length - 3) + '.wasm';
+
+await $`rustc --target wasm32-unknown-unknown -O --crate-type=cdylib "${filePath}" -o "${outputFile}"`
+
+console.log('Ok');
