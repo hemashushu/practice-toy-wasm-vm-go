@@ -6,7 +6,7 @@ let args = process.argv;
 if (args.length != 4) {
     console.log(
 `Usage:
-./rust2wasm path-to-source.rs
+./c2wasm path-to-source.c
 `);
     process.exit(1);
 }
@@ -15,14 +15,14 @@ import 'path';
 
 let filePath = path.resolve(args[3]);
 
-if (!filePath.endsWith('.rs')) {
-    console.log('Only *.rs file is supported.');
+if (!filePath.endsWith('.c')) {
+    console.log('Only *.c file is supported.');
     process.exit(1);
 }
 
 let pos = filePath.lastIndexOf('.');
 let outputFile = filePath.substring(0, pos) + '.wasm';
 
-await $`rustc --target wasm32-unknown-unknown -O -C lto --crate-type=cdylib "${filePath}" -o "${outputFile}"`
+await $`clang --target=wasm32 -c --no-standard-libraries "${filePath}" -o "${outputFile}"`
 
 console.log(`successful: ${outputFile}`);

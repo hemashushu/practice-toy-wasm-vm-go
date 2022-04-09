@@ -6,18 +6,22 @@
 
 - [(Practice) Toy WebAssembly VM - Go](#practice-toy-webassembly-vm-go)
   - [使用方法](#使用方法)
+    - [测试](#测试)
     - [编译](#编译)
     - [运行指定的脚本](#运行指定的脚本)
   - [附录](#附录)
-    - [常用工具 wasm-tools (推荐)](#常用工具-wasm-tools-推荐)
+    - [工具之 wasm-tools](#工具之-wasm-tools)
       - [文本和二进制相互转换](#文本和二进制相互转换)
       - [查看二进制信息](#查看二进制信息)
       - [单单查看段信息](#单单查看段信息)
-    - [常用工具 wabt](#常用工具-wabt)
+    - [工具之 wabt](#工具之-wabt)
       - [文本格式和二进制格式转换](#文本格式和二进制格式转换)
       - [查看二进制文件内容](#查看二进制文件内容)
       - [运行字节码](#运行字节码)
-    - [Rust 编译到 Wasm](#rust-编译到-wasm)
+    - [从 Rust 编译到 Wasm](#从-rust-编译到-wasm)
+      - [编译单独一个 Rust 源码文件](#编译单独一个-rust-源码文件)
+      - [编译一个 cargo 项目](#编译一个-cargo-项目)
+    - [从 C 编译到 wasm](#从-c-编译到-wasm)
     - [使用 wasm-pack 和 wasm-bindgen](#使用-wasm-pack-和-wasm-bindgen)
 
 <!-- /code_chunk_output -->
@@ -27,6 +31,10 @@
 > 注：本项目是阅读和学习《WebAssembly 原理与核心技术》时的随手练习，并无实际用途。程序的原理、讲解和代码的原始出处请参阅书本。
 
 ## 使用方法
+
+### 测试
+
+`$ go test ./...`
 
 ### 编译
 
@@ -48,7 +56,7 @@
 
 ## 附录
 
-### 常用工具 wasm-tools (推荐)
+### 工具之 wasm-tools
 
 https://github.com/bytecodealliance/wasm-tools
 
@@ -76,9 +84,10 @@ https://github.com/bytecodealliance/wasm-tools
 
 `$ wasm-tools objdump 01-hello.wasm`
 
-### 常用工具 wabt
+### 工具之 wabt
 
 wabt
+
 https://github.com/WebAssembly/wabt
 
 #### 文本格式和二进制格式转换
@@ -107,17 +116,21 @@ https://github.com/WebAssembly/wabt
 
 `$ wasm-interp test.wasm --run-all-exports`
 
-### Rust 编译到 Wasm
+### 从 Rust 编译到 Wasm
 
-1. 先添加 target `wasm32-unknown-unknown`
+先添加 target `wasm32-unknown-unknown`
 
 `$ rustup target add wasm32-unknown-unknown`
 
-2. 编译单独一个文件的 Rust 源码
+参考：
 
-`$ rustc --target wasm32-unknown-unknown -O --crate-type=cdylib 02-rust.rs -o 02-rust.wasm`
+https://www.hellorust.com/setup/wasm-target/
 
-3. 编译一个 cargo 项目
+#### 编译单独一个 Rust 源码文件
+
+`$ rustc --target wasm32-unknown-unknown -C lto -O --crate-type=cdylib 02-rust.rs -o 02-rust.wasm`
+
+#### 编译一个 cargo 项目
 
 确保 `Cargo.toml` 的内容如下：
 
@@ -131,8 +144,20 @@ crate-type = ["cdylib"]
 
 `$ cargo build --target wasm32-unknown-unknown --release`
 
+### 从 C 编译到 wasm
+
+`$ clang --target=wasm32 -c --no-standard-libraries 01-hello.c -o 01-hello.wasm`
+
+参考：
+
+- https://depth-first.com/articles/2019/10/16/compiling-c-to-webassembly-and-running-it-without-emscripten/
+- https://dassur.ma/things/c-to-webassembly/
+- https://00f.net/2019/04/07/compiling-to-webassembly-with-llvm-and-clang/
+
 ### 使用 wasm-pack 和 wasm-bindgen
 
-构建跟 JavaScript 互动的程序，详细：
+构建跟 JavaScript 互动的程序
+
+参考：
 
 https://developer.mozilla.org/en-US/docs/WebAssembly/Rust_to_wasm

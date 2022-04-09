@@ -1,6 +1,9 @@
 package assert
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func AssertEqual[T comparable](t *testing.T, expected T, actual T) {
 	t.Helper()
@@ -19,5 +22,17 @@ func AssertSliceEqual[T comparable](t *testing.T, expected []T, actual []T) {
 
 	for i := range expected {
 		AssertEqual(t, expected[i], actual[i])
+	}
+}
+
+func AssertNil(t *testing.T, expected interface{}) {
+	t.Helper()
+
+	if expected == nil ||
+		(reflect.ValueOf(expected).Kind() == reflect.Ptr &&
+			reflect.ValueOf(expected).IsNil()) {
+		// pass
+	} else {
+		t.Fatal("expected nil")
 	}
 }

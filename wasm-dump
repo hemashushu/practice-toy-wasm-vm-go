@@ -1,0 +1,23 @@
+#!/bin/zx
+
+let args = process.argv;
+//console.log(args);
+
+if (args.length != 4) {
+    console.log(
+`Usage:
+./dump-wasm path-to-source.wasm
+`);
+    process.exit(1);
+}
+
+import 'path';
+
+let filePath = path.resolve(args[3]);
+
+if (!filePath.endsWith('.wasm')) {
+    console.log('Only *.wasm file is supported.');
+    process.exit(1);
+}
+
+await $`wasm-tools dump ${filePath}`
