@@ -2,6 +2,7 @@ package binary
 
 import (
 	"testing"
+	"wasmvm/assert"
 )
 
 func TestDecodeVarUint(t *testing.T) {
@@ -26,21 +27,13 @@ func TestDecodeVarInt(t *testing.T) {
 
 func testDecodeVarUint32(t *testing.T, data []byte, expected_value uint32, expected_bytes int) {
 	value, bytes := decodeVarUint(data, 32)
-	if expected_value != uint32(value) {
-		t.Fatalf("value error")
-	}
 
-	if expected_bytes != bytes {
-		t.Fatalf("bytes error")
-	}
+	assert.AssertEqual(t, expected_value, uint32(value))
+	assert.AssertEqual(t, expected_bytes, bytes)
 }
 func testDecodeVarInt32(t *testing.T, data []byte, expected_value int32, expected_bytes int) {
 	value, bytes := decodeVarInt(data, 32)
-	if expected_value != int32(value) {
-		t.Fatalf("value error")
-	}
 
-	if expected_bytes != bytes {
-		t.Fatalf("bytes error")
-	}
+	assert.AssertEqual(t, expected_value, int32(value))
+	assert.AssertEqual(t, expected_bytes, bytes)
 }

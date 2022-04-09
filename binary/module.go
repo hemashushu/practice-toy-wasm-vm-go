@@ -106,12 +106,18 @@ type SecHeader struct {
 //                   ^                 ^
 //                   |--- 参数类型列表   |--- 返回值类型列表
 //
+// <val_type>: count:uint32 + data_type:byte{0,}
+//
+// 因为数据类型只有 4 种，所以 data_type 的数据类型是 byte
 
 // （函数）类型项目
 type FuncType struct {
+	Tag         byte      // 只能是 0x60
 	ParamTypes  []ValType // 参数类型列表
 	ResultTypes []ValType // 返回值类型列表
 }
+
+const FtTag = 0x60
 
 // -------- 导入段
 
