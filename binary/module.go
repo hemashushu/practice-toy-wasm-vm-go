@@ -60,17 +60,6 @@ type (
 	LabelIdx  = uint32 // （每个函数内部）跳转标签的索引
 )
 
-// 值类型（只支持 4 种类型）
-
-type ValType = byte
-
-const (
-	ValTypeI32 ValType = 0x7f // i32
-	ValTypeI64 ValType = 0x7E // i64
-	ValTypeF32 ValType = 0x7D // f32
-	ValTypeF64 ValType = 0x7C // f64
-)
-
 // 二进制文件头
 
 const (
@@ -78,9 +67,9 @@ const (
 	Version     = 0x00000001 // 1， 占用了 4 个字节
 )
 
-// ======== 段的定义
+// ================ 段的定义
 
-// -------- 段的前缀
+// ---------------- 段的前缀
 
 // 每一个段的开头
 // id:byte + byte_count:uint32 + ...
@@ -93,7 +82,7 @@ type SecHeader struct {
 	Bytes uint32 // 段内容的长度
 }
 
-// -------- （函数）类型段（函数类型即函数签名）
+// ---------------- （函数）类型段（函数类型即函数签名）
 
 // type_sec: 0x01 + byte_count:byte + func_type_items_count:uint32 + func_type{1,}
 //
@@ -109,6 +98,14 @@ type SecHeader struct {
 // <val_type>: count:uint32 + data_type:byte{0,}
 //
 // 因为数据类型只有 4 种，所以 data_type 的数据类型是 byte
+//
+// 文本格式
+//
+// (type (func (param i32) (param i32) (result i32)))
+// ;; 可以添加自动索引 $ft1（诸如 `$xx` 在 wat 里也叫标识符）
+// (type $ft1 (func (param i32) (result f64)))
+// ;; 多个参数可以写在同一个 param 列表里，多个返回值也可以写在同一个 result 列表里
+// (type $ft1 (func (param i32 i32) (result f64 f64)))
 
 // （函数）类型项目
 type FuncType struct {
@@ -119,7 +116,7 @@ type FuncType struct {
 
 const FtTag = 0x60
 
-// -------- 导入段
+// ---------------- 导入段
 
 // import_sec: 0x02 + byte_count:uint32 + <import>
 // import: module_name:string + member_name:string + import_desc
@@ -129,6 +126,28 @@ const FtTag = 0x60
 // 当然不包括这个描述数字本身占用的空间）
 //
 // import_desc: tag:byte + (func_type_idx | table_type | mem_type | global_type)
+//
+// 文本格式：
+//
+// ;; "env" 和 "f1" 分别是导入项的模块名和条目名
+// (type $ft1 (func (param i32 i32) (result i32)))
+// (import "env" "f1" (func $f1 (type $ft1)))
+//
+// ;; $ft1 和 “f1" 可以内联
+// (import "env" "f1" (func $f1 (param i32 i32) (result i32)))
+//
+// (import "env" "t1" (table $t 1 8 funcref))
+// (import "env" "m1" (memory $m 4, 16))
+// (import "env" "g1" (global $g1 i32))			;; 全局常量
+// (import "env" "g2" (global $g1 (mut i32)))	;; 全局变量
+//
+// 导入项可以内联到函数、表、内存和全局中
+//
+// (func $f1 (import "env" "f1") (type $ft1))
+// (table $t1 (import "env" "t1") 1 8 funcref)
+// (memory $m1 (import "env" "m1") 4 16)
+// (global $g1 (import "env" "g1") i32)
+// (global $g2 (import "env" "g2") (mut i32))
 
 // 导入项目
 type Import struct {
@@ -173,15 +192,46 @@ type ImportDesc struct {
 // 注意
 // 函数的索引有可能不是从 0 开始，比如导入了 3 个函数，则这个列表的第一个函数
 // 的索引应该是 3。
+//
+// 文本格式
+//
+// (type $ft1 (func (param i32 i32) (result i32)))
+// (func $add (type $ft1)	;; $ft1 是类型索引，$add 是函数的（自动）索引
+//    (local i64 i64)		;; 声明两个局部变量
+//    (i64.add (local.get 2) (local.get 3))	;; 访问上面两个局部变量，local.get 指令使用了内联方式书写
+//    (drop)
+//    (i32.add (local.get 0) (local.get 1))	;; 访问函数的两个参数，函数参数也是局部变量
+// )
+//
+// 如果不使用内联方式书写局部变量，则：
+//
+// (func $add (param $a i32) (param $b i32) (result i32)
+// 	(local $x i64)
+// 	(local $y i64)
+// 	(i64.add (local.get $x) (local.get $y))	;; 索引数字换成了自动索引（的名称）
+// 	(drop)
+// 	(i32.add (local.get $a) (local.get $b))
+// )
 
-// -------- 表段
+// ---------------- 表段
 
 // 表段和元素段目前可用于列出 “指针化” 的函数，实现诸如 “高阶函数” 和跨模块调用等功能。
 // 其中表段仅用于说明索引的大小，真正的函数索引列表在元素段里，
 // 也就是说元素段存储的是表的（初始化）数据
-
+//
 // table_sec: 0x04 + byte_count:uint32 + <table_type> // 目前仅支持一个 table_type
 // table_type: 0x70 + limits
+//
+// (func $f1)
+// (func $f2)
+// (table 1 10 funcref)						;; 表的类型暂时只能是 "funcref"
+// (elem (offset (i32.const 1)) $f1 $f2)	;; 元素项的偏移值需要使用（const）表达式
+//
+// 元素项也可以内联到表段里：
+//
+// (table funcref				;; 自动决定了表的 limit, min = 2, max = 2
+// 	(elem $f1 $f2)				;; 自动决定了偏移值为 0
+// )
 
 const FuncRef = 0x70
 
@@ -210,14 +260,31 @@ type Limits struct {
 	Max uint32 // max，即上限，是可选的，省略上限时，该位置对应的字节也不会有
 }
 
-// -------- 内存段
+// ---------------- 内存段
 
 // mem_sec: 0x05 + byte_count:uint32 + <mem_type> // 目前仅支持一个 mem_type
 // mem_type: limits
+//
+// 文本格式
+//
+// (memory 1 16)						;; 指定 limit 值，即 min 和 max
+// (data (offset (i32.const 10)) "foo")	;; 数据偏移量需要使用（const）表达式
+// (data (offset (i32.const 20)) "bar")
+//
+// 将数据内联到内存段里：
+// (memory 			;; 自动 limit, min = 1, max = 1
+// 	(data "foo")	;; 自动偏移值 0
+// 	(data "bar")
+// )
+//
+// 初始数据使用字符串的形式指定，内容可以是
+// - 单一字符："abc文字"（字符将会以 utf-8 形式编码）
+// - 十六进制 byte: "\de\ad\be\ef\00"
+// - Unicode code point: "\u{1234}\u{5678}"
 
 type MemType = Limits
 
-// -------- 全局段
+// ---------------- 全局段
 
 // 全局段列出模块所有全局变量/常量
 // 变量需要指出是否可变，以及初始值表达式
@@ -233,8 +300,14 @@ type MemType = Limits
 // - 01   			; 可变
 // - 41 80 80 c0 00	; i32.const 0x100000
 // - 0b				; 初始值表达式结束
-
-type Expr interface{}
+//
+// 文本格式
+// (gloabl $g1 (mut i32) (i32.const 10))	;; 全局变量
+// (gloabl $g1 i32 (i32.const 20))			;; 全局常量
+// (func
+// 	(global.get $g1)
+// 	(global.get $g2)
+// )
 
 // 全局项目
 type Global struct {
@@ -254,12 +327,28 @@ const (
 	MutVar   byte = 1 // 变量
 )
 
-// -------- 导出段
+// ---------------- 导出段
 
 // 可以导出：函数、表、内存、全局变量
 // export_sec: 0x07 + byte_count:uint32 + <export>
 // export: name:string + export_desc
 // export_desc: tag:byte + (func_idx | table_idx | mem_idx | global_idx)
+//
+// 文本格式：
+//
+// (export "f1" (func $f1))		;; 使用自动索引 #f1
+// (export "f2" (func $f2))
+// (export "t1" (table $t))
+// (export "m1" (memory $m))
+// (export "g1" (global $g1))
+// (export "g2" (global $g2))
+//
+// 导出项内联到函数、表、内存、全局
+//
+//	(func $f (export "f1") ...)
+//	(func $t (export "t") ...)
+//	(func $m (export "m") ...)
+//	(func $g (export "g1") ...)
 
 // 导出项
 type Export struct {
@@ -281,12 +370,19 @@ type ExportDesc struct {
 	Idx uint32 // 函数、表、内存块、全局项的索引
 }
 
-// -------- 起始段
+// ---------------- 起始段
 
 // 指定 wasm 加载后自动开始执行的函数（比如 main 函数）
 // start_sec: 0x08 + byte_count:uint32 + func_idx
+//
+// 文本格式
+//
+// (module
+// 	(func $main ...)
+// 	(start $main)	;; start 指令后面跟着起始函数的索引值
+// )
 
-// -------- 元素段
+// ---------------- 元素段
 
 // 元素段用于存储存放表段的初始化数据，跟表段共同完成诸如 “高阶函数” 的功能，
 // 目前元素段的内容是函数的索引。
@@ -306,7 +402,7 @@ type Elem struct {
 	Init   []FuncIdx // 函数索引
 }
 
-// -------- 代码段
+// ---------------- 代码段
 
 // code_sec: 0x0a + byte_count:uint32 + <code>
 // code: byte_count:uint32 + <locals> + expr
@@ -326,7 +422,7 @@ type Locals struct {
 	Type ValType // 类型
 }
 
-// -------- 数据段
+// ---------------- 数据段
 
 // 数据段跟元素段类似，存储内存的初始化数据
 // 数据段每一项由 3 部分组成：
@@ -354,7 +450,7 @@ type Data struct {
 	Init   []byte // 内容
 }
 
-// -------- 自定义段
+// ---------------- 自定义段
 //
 // 自定义段可以出现多次，出现的位置也不限。
 // 一般用于存放函数的名称、参数和变量的名称等信息，不参与运算

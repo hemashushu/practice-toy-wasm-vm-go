@@ -5,6 +5,14 @@ import (
 	"testing"
 )
 
+func AssertTrue(t *testing.T, expected bool) {
+	t.Helper()
+
+	if !expected {
+		t.Fatalf("expected true")
+	}
+}
+
 func AssertEqual[T comparable](t *testing.T, expected T, actual T) {
 	t.Helper()
 

@@ -37,7 +37,7 @@ func TestReadFunctionSection(t *testing.T) {
 		panic(err)
 	}
 
-	testResourcesDir := filepath.Join(currentDir, "..", "test", "resources")
+	testResourcesDir := filepath.Join(currentDir, "..", "test", "resources", "reader")
 	wasmFilePath := filepath.Join(testResourcesDir, "test-read-section-1.wasm")
 
 	// "test-read-section-1.wasm" 只有一个函数和一个导出项
@@ -105,7 +105,7 @@ func TestReadFunctionSection(t *testing.T) {
 	// 检查 代码段
 	// 0x001e | 0a 07       | code section
 	// 0x0020 | 01          | 1 count
-	// ============== func 0 ====================
+	// ====================== func 0 ====================
 	// 0x0021 | 05          | size of function
 	// 0x0022 | 00          | 0 local blocks
 	// 0x0023 | 41 e4 00    | I32Const { value: 100 }
@@ -130,7 +130,7 @@ func TestReadMultipleSections(t *testing.T) {
 		panic(err)
 	}
 
-	testResourcesDir := filepath.Join(currentDir, "..", "test", "resources")
+	testResourcesDir := filepath.Join(currentDir, "..", "test", "resources", "reader")
 	wasmFilePath := filepath.Join(testResourcesDir, "test-read-section-2.wasm")
 
 	// "test-read-section-2.wasm" 有：

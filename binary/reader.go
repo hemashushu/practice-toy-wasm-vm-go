@@ -27,7 +27,7 @@ func Decode(data []byte) Module {
 	return module
 }
 
-// -------- 辅助读取函数
+// ---------------- 辅助读取函数
 
 // 读取一个字节
 func (r *wasmReader) readByte() byte {
@@ -94,12 +94,38 @@ func (r *wasmReader) readName() string {
 	return string(data)
 }
 
+func (r *wasmReader) readZero() byte {
+	b := r.readByte()
+	if b != 0 {
+		panic(errors.New("expected zero"))
+	}
+	return 0
+}
+
 // 获取剩余的数据的长度（字节数）
 func (r *wasmReader) remaining() int {
 	return len(r.data)
 }
 
-// -------- 解码模块
+func (module Module) GetBlockType(bt BlockType) FuncType {
+	switch bt {
+	case BlockTypeI32:
+		return FuncType{ResultTypes: []ValType{ValTypeI32}}
+	case BlockTypeI64:
+		return FuncType{ResultTypes: []ValType{ValTypeI64}}
+	case BlockTypeF32:
+		return FuncType{ResultTypes: []ValType{ValTypeF32}}
+	case BlockTypeF64:
+		return FuncType{ResultTypes: []ValType{ValTypeF64}}
+	case BlockTypeEmpty:
+		return FuncType{}
+	default:
+		// todo:: 检查是否符合规范
+		return module.TypeSec[bt]
+	}
+}
+
+// ---------------- 解码模块
 
 func (r *wasmReader) readModule(m *Module) {
 	m.Magic = r.readU32()
@@ -142,7 +168,7 @@ func (r *wasmReader) readSections(m *Module) {
 	}
 }
 
-// -------- 解码自定义段
+// ---------------- 解码自定义段
 
 func (r *wasmReader) readCustomSec() CustomSec {
 	// 自定义段的数据长度由段 id 后的第一个 uint32 数字指出
@@ -155,7 +181,7 @@ func (r *wasmReader) readCustomSec() CustomSec {
 	}
 }
 
-// -------- 解码非自定义段（的入口）
+// ---------------- 解码非自定义段（的入口）
 
 func (r *wasmReader) readNonCustomSec(sectionId byte, m *Module) {
 	switch sectionId {
@@ -184,7 +210,7 @@ func (r *wasmReader) readNonCustomSec(sectionId byte, m *Module) {
 	}
 }
 
-// -------- 解码（函数）类型段
+// ---------------- 解码（函数）类型段
 
 // 段的内容长度位于第一个字节之后的一个 uint32 数字
 // 第一个字节是段的类型 id
@@ -233,7 +259,7 @@ func (reader *wasmReader) readValType() ValType {
 	return b
 }
 
-// -------- 解码导入段
+// ---------------- 解码导入段
 
 func (r *wasmReader) readImportSec() []Import {
 	vec := make([]Import, r.readVarU32())
@@ -272,7 +298,7 @@ func (r *wasmReader) readImportDesc() ImportDesc {
 	return desc
 }
 
-// -------- 解码函数（列表）段
+// ---------------- 解码函数（列表）段
 
 func (r *wasmReader) readFuncSec() []TypeIdx {
 	vec := make([]TypeIdx, r.readVarU32())
@@ -282,7 +308,7 @@ func (r *wasmReader) readFuncSec() []TypeIdx {
 	return vec
 }
 
-// -------- 解码表（列表）段
+// ---------------- 解码表（列表）段
 
 func (r *wasmReader) readTableSec() []TableType {
 	vec := make([]TableType, r.readVarU32())
@@ -316,7 +342,7 @@ func (r *wasmReader) readLimits() Limits {
 	return limits
 }
 
-// -------- 解码内存块（列表）段
+// ---------------- 解码内存块（列表）段
 
 func (r *wasmReader) readMemSec() []MemType {
 	vec := make([]MemType, r.readVarU32())
@@ -326,7 +352,7 @@ func (r *wasmReader) readMemSec() []MemType {
 	return vec
 }
 
-// -------- 解码全局变量段
+// ---------------- 解码全局变量段
 
 func (r *wasmReader) readGlobalSec() []Global {
 	vec := make([]Global, r.readVarU32())
@@ -352,15 +378,20 @@ func (r *wasmReader) readGlobalType() GlobalType {
 }
 
 func (r *wasmReader) readExpr() Expr {
-	for r.readByte() != 0x0B {
-		// todo::
-		// read until reach 0x0B
-	}
+	// 	for r.readByte() != 0x0B {
+	// 		// read until reach 0x0B
+	// 	}
+	//
+	// 	return nil
 
-	return nil
+	insts, end := r.readInstructions()
+	if end != End_ {
+		panic(errors.New("invalid expression end"))
+	}
+	return insts
 }
 
-// -------- 解码导出段
+// ---------------- 解码导出段
 
 func (r *wasmReader) readExportSec() []Export {
 	vec := make([]Export, r.readVarU32())
@@ -392,14 +423,14 @@ func (reader *wasmReader) readExportDesc() ExportDesc {
 	return desc
 }
 
-// -------- 解码起始段
+// ---------------- 解码起始段
 
 func (r *wasmReader) readStartSec() *uint32 {
 	idx := r.readVarU32()
 	return &idx
 }
 
-// -------- 解码元素段（表的初始内容）
+// ---------------- 解码元素段（表的初始内容）
 
 func (r *wasmReader) readElemSec() []Elem {
 	vec := make([]Elem, r.readVarU32())
@@ -425,7 +456,7 @@ func (r *wasmReader) readFuncIndices() []FuncIdx {
 	return vec
 }
 
-// -------- 解码（函数）代码段
+// ---------------- 解码（函数）代码段
 
 func (r *wasmReader) readCodeSec() []Code {
 	vec := make([]Code, r.readVarU32())
@@ -439,8 +470,7 @@ func (r *wasmReader) readCode() Code {
 	codeReader := wasmReader{data: r.readBytes()}
 	code := Code{
 		Locals: codeReader.readLocalsVec(),
-		// todo::
-		//Expr:   reader.readExpr(),
+		Expr:   codeReader.readExpr(),
 	}
 
 	// 检查局部变量的数量是否溢出
@@ -471,7 +501,7 @@ func (r *wasmReader) readLocals() Locals {
 	}
 }
 
-// -------- 解码数据段（内存块初始内容）
+// ---------------- 解码数据段（内存块初始内容）
 
 func (r *wasmReader) readDataSec() []Data {
 	vec := make([]Data, r.readVarU32())
@@ -486,5 +516,138 @@ func (r *wasmReader) readData() Data {
 		Mem:    r.readVarU32(),
 		Offset: r.readExpr(),
 		Init:   r.readBytes(),
+	}
+}
+
+// ---------------- 解码指令
+
+func (r *wasmReader) readInstructions() (insts []Instruction, end byte) {
+	for {
+		inst := r.readInstruction()
+		if inst.Opcode == Else_ || inst.Opcode == End_ {
+			end = inst.Opcode
+			return
+		}
+
+		insts = append(insts, inst)
+	}
+}
+
+func (r *wasmReader) readInstruction() (inst Instruction) {
+	inst.Opcode = r.readByte()
+	inst.Args = r.readArgs(inst.Opcode)
+	return
+}
+
+func (r *wasmReader) readArgs(opcode byte) interface{} {
+	switch opcode {
+
+	// 数值指令
+
+	case I32Const:
+		return r.readVarS32()
+	case I64Const:
+		return r.readVarS64()
+	case F32Const:
+		return r.readF32()
+	case F64Const:
+		return r.readF64()
+	case TruncSat:
+		return r.readByte()
+
+	// 变量指令
+
+	case LocalGet, LocalSet, LocalTee:
+		return r.readVarU32() // local_idx
+	case GlobalGet, GlobalSet:
+		return r.readVarU32() // global_idx
+
+	// 内存指令
+
+	case MemorySize, MemoryGrow:
+		return r.readZero()
+
+	// 结构化控制指令
+
+	case Block, Loop:
+		return r.readBlockArgs()
+	case If:
+		return r.readIfArgs()
+
+	// 跳转指令
+
+	case Br, BrIf:
+		return r.readVarU32() // label_idx
+	case BrTable:
+		return r.readBrTableArgs()
+
+	// 函数调用指令
+
+	case Call:
+		return r.readVarU32() // func_idx
+	case CallIndirect:
+		return r.readCallIndirectArgs()
+
+	default:
+		// 内存指令（续）
+		if opcode >= I32Load && opcode <= I64Store32 {
+			return r.readMemArg()
+		}
+		return nil
+	}
+}
+
+func (r *wasmReader) readBlockArgs() (args BlockArgs) {
+	var end byte
+	args.BT = r.readBlockType()
+	args.Instrs, end = r.readInstructions()
+	if end != End_ {
+		panic(errors.New("invalid block end"))
+	}
+	return
+}
+
+func (r *wasmReader) readBlockType() int32 {
+	bt := r.readVarS32()
+	if bt < 0 {
+		if bt != BlockTypeI32 && bt != BlockTypeI64 &&
+			bt != BlockTypeF32 && bt != BlockTypeF64 &&
+			bt != BlockTypeEmpty {
+			panic(errors.New("invalid block type"))
+		}
+	}
+	return bt
+}
+
+func (r *wasmReader) readIfArgs() (args IfArgs) {
+	var end byte
+	args.BT = r.readBlockType()
+	args.Instrs1, end = r.readInstructions()
+	if end == Else_ {
+		args.Instrs2, end = r.readInstructions()
+		if end != End_ {
+			panic(errors.New("invalid else block"))
+		}
+	}
+	return
+}
+
+func (r *wasmReader) readBrTableArgs() BrTableArgs {
+	return BrTableArgs{
+		Labels:  r.readFuncIndices(),
+		Default: r.readVarU32(),
+	}
+}
+
+func (r *wasmReader) readCallIndirectArgs() uint32 {
+	typeIdx := r.readVarU32()
+	r.readZero() // 表索引暂时只能是 0
+	return typeIdx
+}
+
+func (r *wasmReader) readMemArg() MemArg {
+	return MemArg{
+		Align:  r.readVarU32(),
+		Offset: r.readVarU32(),
 	}
 }
