@@ -4,6 +4,11 @@ package interpreter
 //
 // -------- 常量指令
 // 将指令当中的立即数压入栈
+//
+// i32.const
+// i64.const
+// f32.const
+// f64.const
 
 func i32Const(v *vm, args interface{}) {
 	v.operandStack.pushS32(args.(int32))

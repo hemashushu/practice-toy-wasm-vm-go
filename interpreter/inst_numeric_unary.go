@@ -15,17 +15,24 @@ import (
 // i32.ctz:		count trailing zeros 统计后缀（低端位）比特值为 0 的数量 0x68
 // i32.popcnt:  population count 统计所有位当中，比特值为 1 的数量 0x69
 //
-// 如 0b00001100, clz == 4, ctz == 2, popcnt == 2
+// 如 8'b00001100, clz == 4, ctz == 2, popcnt == 2
+//
+// 浮点数的一元运算，返回值仍然是浮点数
 //
 // f32.abs:		绝对值
 // f32.neg:		取反
 // f32.ceil:	向上取整（x 数轴向右方向取整）
 // f32.floor:   向下取整（x 数轴向左方向取整）
 // f32.trunc:   直接裁掉小数部分，取整
-// f32.nearest: 向中取整（x 数轴向原点方向取整）
+// f32.nearest: 就近取整（4 舍 6 入，5 奇进偶不进）
 // f32.sqrt:	平方根
 //
-// 注，只有 neg 可以直接映射到 go 的一元运算，其他的使用了标准库实现
+// 注：
+// - 只有 neg 可以直接映射到 go 的一元运算，其他的使用了标准库实现
+//
+// 关于 nearest 函数
+// https://en.wikipedia.org/wiki/Rounding
+// https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Numeric/Nearest
 
 // i32
 

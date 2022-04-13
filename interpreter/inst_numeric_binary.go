@@ -13,10 +13,38 @@ import (
 // 从栈顶弹出 2 个操作数，经过运算后压入栈
 // 先弹出的是 rhs，后弹出的是 lhs
 //
+//
+// i32.add
+// i32.sub
+// i32.mul
+// i32.div_s
+// i32.div_u
+// i32.rem_s
+// i32.rem_u
+//
+// i32.and
+// i32.or
+// i32.xor
+// i32.shl
+// i32.shr_s	;; 算术右移
+// i32.shr_u	;; 逻辑右移
+// i32.rotl		;; 左旋，即左移，然后将溢出的比特数拼接到低端
+//				;; 8'b1110_0000 左旋 1 的结果是 8'b1100_0001
+//				;; https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Numeric/Left_rotate
+// i32.rotr		;; 右旋
+//
+// f32.add
+// f32.sub
+// f32.mul
+// f32.div
+//
+// f32.min
+// f32.max
+// f32.copysign	;; 应用位于栈顶的操作数的符号到位于第二位的操作数
+//
 // 注：
 // - 整数的旋转指令 rotl 和 rotr 使用了 go 标准库实现
 // - 浮点数的 min, max 使用了 go 标准库实现
-// - 浮点数的 copysign 的作用：应用位于栈顶的操作数的符号到位于第二位的操作数
 // - 移位操作可以先对第二个操作数进行一次求余运算，以防止错误
 
 // i32

@@ -539,6 +539,10 @@ func (r *wasmReader) readInstruction() (inst Instruction) {
 	return
 }
 
+// 读取指令的操作数
+// 注：
+// - 只有部分指令才有操作数
+// - 操作数的类型和长度是固定的
 func (r *wasmReader) readArgs(opcode byte) interface{} {
 	switch opcode {
 

@@ -9,7 +9,27 @@ package interpreter
 // 从栈顶弹出 2 个操作数，然后把比较结果（int32，相当于 boolean）压入栈
 // 注意先弹出的作为 RHS，后弹出的作为 LHS。
 
-// i32
+// i64 有跟如下 i32 一样的比较指令
+//
+// i32.eq
+// i32.ne
+// i32.lt_s
+// i32.lt_u
+// i32.gt_s
+// i32.gt_u
+// i32.le_s
+// i32.le_u
+// i32.ge_s
+// i32.ge_u
+
+// f64 有跟如下 f32 一样的比较指令
+//
+// f32.eq
+// f32.ne
+// f32.lt
+// f32.gt
+// f32.le
+// f32.ge
 
 func i32Eq(v *vm, _ interface{}) {
 	// 相等比较既可以作为 unsigned 数字取出，也可以作为 signed 数字取出

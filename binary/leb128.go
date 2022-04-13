@@ -55,7 +55,7 @@ func decodeVarUint(data []byte, bitWidth int) (uint64, int) {
 		if i == bitWidth/7 {
 			// 到达最后一个字节
 			if b&0b1000_0000 != 0 {
-				// 最后一个字节的第 7 位（从 0 开始数）应该为 0
+				// 最后一个字节的索引 7 比特应该为 0
 				panic(errors.New("data too long"))
 			}
 
@@ -80,7 +80,7 @@ func decodeVarInt(data []byte, bitWidth int) (int64, int) {
 		if i == bitWidth/7 {
 			// 到达最后一个字节
 			if b&0b10000000 != 0 {
-				// 最后一个字节的第 7 位（从 0 开始数）应该为 0
+				// 最后一个字节的索引 7 比特应该为 0
 				panic(errors.New("data too long"))
 			}
 
@@ -97,8 +97,8 @@ func decodeVarInt(data []byte, bitWidth int) (int64, int) {
 
 		result |= (int64(b) & 0b0111_1111) << (i * 7)
 		if b&0b1000_0000 == 0 {
-			if (i*7 < bitWidth) && (b&0b0010_0000 != 0) {
-				// （第 6 位，从 0 开始数）为 1，表示负数，需要把高位都补上 1
+			if (i*7 < bitWidth) && (b&0b0100_0000 != 0) {
+				// 如果索引 6 比特为 1，表示负数，需要把高位都补上 1
 				result = result | (-1 << ((i + 1) * 7))
 			}
 			return result, i + 1
