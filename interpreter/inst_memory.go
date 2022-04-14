@@ -211,6 +211,18 @@ func getEffectiveAddress(v *vm, memArg interface{}) uint64 {
 // 2. 从操作数栈弹出一个 uint32，作为目标地址（addr）
 // 3. 计算有效地址
 // 4. 将 data 写入指定地址的内存
+//
+// i32.store
+// i32.store_16
+// i32.store_8
+//
+// i64.store
+// i64.store_32
+// i64.store_16
+// i64.store_8
+//
+// f32.store
+// f64.store
 
 func i32Store(v *vm, memArg interface{}) {
 	val := v.operandStack.popU32()
