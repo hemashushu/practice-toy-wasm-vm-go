@@ -1,6 +1,14 @@
 package binary
 
-// 值类型（只支持 4 种类型）
+// 值类型
+//
+// 虚拟机只支持 4 种类型：i32, i64, f32, f64
+//
+// 其中 i32， i64 在内部是指 `无符号的整数`，
+// 但部分指令是需要将 `无符号整数` 解析为 `有符号整数` 再进行运算，
+// 比如 `lt_u`, `lt_s`，所有有些地方会出现 u32, u64, s32, s64 等名称。
+//
+// https://webassembly.github.io/spec/core/syntax/values.html#integers
 
 type ValType = byte
 

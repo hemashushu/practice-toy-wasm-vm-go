@@ -9,7 +9,7 @@ import (
 //
 // -------- 类型转换指令
 //
-// 整数截断
+// ### 整数截断
 //
 // i32.wrap_i64
 //
@@ -19,7 +19,8 @@ func i32WrapI64(v *vm, _ interface{}) {
 	v.operandStack.pushU32(uint32(v.operandStack.popU64()))
 }
 
-// 整数提升
+// ### 整数提升
+//
 // 将位宽较窄的整数提升为位宽较广的整数，比如将 32 位整数提升为 64 位
 //
 // 源 i32，目标 i32
@@ -63,7 +64,8 @@ func i64Extend32S(v *vm, _ interface{}) {
 	v.operandStack.pushS64(int64(int32(v.operandStack.popS64())))
 }
 
-// 浮点截断（浮点数转整数）
+// ### 浮点数转整数（截断运算）
+//
 // 把浮点数截断为整数
 //
 // 源 f32，目标 i32
@@ -170,7 +172,9 @@ func i64TruncF64U(v *vm, _ interface{}) {
 	v.operandStack.pushU64(uint64(f))
 }
 
-// 饱和截断
+// ### 饱和截断
+//
+// 跟一般截断不同的是：
 // - 将 NaN 转为 0
 // - 将正/负无穷转为整数最大/最小值
 
@@ -246,7 +250,7 @@ func truncSatS(z float64, n int) int64 {
 	}
 }
 
-// 整数转换（整数转浮点数）
+// ### 整数转浮点数（转换运算）
 //
 // 源 i32，目标 f32
 // f32.convert_i32_s
@@ -296,7 +300,8 @@ func f64ConvertI64U(v *vm, _ interface{}) {
 	v.operandStack.pushF64(float64(v.operandStack.popU64()))
 }
 
-// 浮点数精度调整
+// ### 浮点数精度调整
+//
 // f32.demote_f64_s
 // f64.promote_f32
 
@@ -308,7 +313,8 @@ func f64PromoteF32(v *vm, _ interface{}) {
 	v.operandStack.pushF64(float64(v.operandStack.popF32()))
 }
 
-// 比特位重新解释
+// ### 比特位重新解释
+//
 // 不改变操作数的比特位，仅重新解释成其他类型
 
 func i32ReinterpretF32(v *vm, _ interface{}) {

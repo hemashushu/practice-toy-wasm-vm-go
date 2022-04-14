@@ -284,6 +284,11 @@ type Limits struct {
 
 type MemType = Limits
 
+const (
+	PageSize     = 65536 // 每页内存 64KB
+	MaxPageCount = 65536
+)
+
 // ---------------- 全局段
 
 // 全局段列出模块所有全局变量/常量

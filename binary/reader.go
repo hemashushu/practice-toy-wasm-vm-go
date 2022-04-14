@@ -65,6 +65,8 @@ func (r *wasmReader) readVarU32() uint32 {
 }
 
 // 读取变长（leb128）signed int32
+// 注：大部分指令使用 unsigned int，但有些使用 signed int，比如
+// const 指令的立即数和 block type
 func (r *wasmReader) readVarS32() int32 {
 	value, bytes := decodeVarInt(r.data, 32)
 	r.data = r.data[bytes:]
@@ -72,6 +74,8 @@ func (r *wasmReader) readVarS32() int32 {
 }
 
 // 读取变长（leb128）signed int64
+// 注：大部分指令使用 unsigned int，但有些使用 signed int，比如
+// const 指令的立即数和 block type
 func (r *wasmReader) readVarS64() int64 {
 	value, bytes := decodeVarInt(r.data, 64)
 	r.data = r.data[bytes:]
@@ -378,12 +382,6 @@ func (r *wasmReader) readGlobalType() GlobalType {
 }
 
 func (r *wasmReader) readExpr() Expr {
-	// 	for r.readByte() != 0x0B {
-	// 		// read until reach 0x0B
-	// 	}
-	//
-	// 	return nil
-
 	insts, end := r.readInstructions()
 	if end != End_ {
 		panic(errors.New("invalid expression end"))

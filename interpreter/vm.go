@@ -1,10 +1,13 @@
 package interpreter
 
-import "wasmvm/binary"
+import (
+	"wasmvm/binary"
+)
 
 type vm struct {
 	operandStack operandStack
 	module       binary.Module
+	memory       *memory
 }
 
 type instFn = func(v *vm, args interface{})
@@ -12,10 +15,81 @@ type instFn = func(v *vm, args interface{})
 // 指令的解析/执行函数表
 var instTable = make([]instFn, 256)
 
+func (v *vm) initMem() {
+	// 当前 wasm 只支持创建一个内存块
+	if len(v.module.MemSec) != 0 {
+		v.memory = newMemory(v.module.MemSec[0])
+	}
+}
+
+func (v *vm) initMemWithInitData(init_data []byte) {
+	v.memory = newMemoryWithInitData(init_data)
+}
+
+func (v *vm) initData() {
+	for _, dataItem := range v.module.DataSec {
+		// 执行偏移值表达式（通常是一个 i32.const 指令）
+		for _, offsetInst := range dataItem.Offset {
+			v.execInst(offsetInst)
+		}
+
+		// 操作数栈的顶端操作数————即偏移值表达式的运算结果————表示内存的有效地址
+		eaddr := v.operandStack.popU64() // 有效地址是 33 位的无符号整数，这里使用 uint64 来存储
+		v.memory.Write(eaddr, dataItem.Init)
+	}
+}
+
+func ExecMainFunc(module binary.Module) {
+	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec)) // 导入函数也会占用函数索引
+	v := &vm{module: module}
+	v.execCode(func_idx)
+}
+
+// 执行指定函数
+// 返回操作数栈和内容的内容，用于测试
+func TestFunc(module binary.Module, func_idx uint32) ([]uint64, []byte) {
+	v := &vm{module: module}
+	v.initMem()
+	v.initData()
+	v.execCode(func_idx)
+	return v.operandStack.slots, dumpMemory(v.memory)
+}
+
+func TestFuncWithInitMemoryData(module binary.Module, init_data []byte, func_idx uint32) ([]uint64, []byte) {
+	v := &vm{module: module}
+	v.initMemWithInitData(init_data)
+	// 这里不执行 Data 段的指令
+	v.execCode(func_idx)
+	return v.operandStack.slots, dumpMemory(v.memory)
+}
+
+func dumpMemory(m *memory) []byte {
+	if m == nil {
+		return []byte{}
+	} else {
+		return m.data
+	}
+}
+
+// 执行指定函数
+func (v *vm) execCode(func_idx uint32) {
+	code := v.module.CodeSec[func_idx]
+	for _, inst := range code.Expr {
+		v.execInst(inst)
+	}
+}
+
+// 执行一条指令
+func (v *vm) execInst(inst binary.Instruction) {
+	instTable[inst.Opcode](v, inst.Args)
+}
+
 func init() {
-	instTable[binary.Call] = call // hack!
+	// 操作数（参数 parameter）指令
 	instTable[binary.Drop] = drop
 	instTable[binary.Select] = select_
+
+	// 数值指令
 	instTable[binary.I32Const] = i32Const
 	instTable[binary.I64Const] = i64Const
 	instTable[binary.F32Const] = f32Const
@@ -149,31 +223,35 @@ func init() {
 	instTable[binary.I64Extend16S] = i64Extend16S
 	instTable[binary.I64Extend32S] = i64Extend32S
 	instTable[binary.TruncSat] = truncSat
-}
 
-func ExecMainFunc(module binary.Module) {
-	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec)) // 导入函数也会占用函数索引
-	v := &vm{module: module}
-	v.execCode(func_idx)
-}
+	// 内存指令
+	instTable[binary.I32Load] = i32Load
+	instTable[binary.I64Load] = i64Load
+	instTable[binary.F32Load] = f32Load
+	instTable[binary.F64Load] = f64Load
+	instTable[binary.I32Load8S] = i32Load8S
+	instTable[binary.I32Load8U] = i32Load8U
+	instTable[binary.I32Load16S] = i32Load16S
+	instTable[binary.I32Load16U] = i32Load16U
+	instTable[binary.I64Load8S] = i64Load8S
+	instTable[binary.I64Load8U] = i64Load8U
+	instTable[binary.I64Load16S] = i64Load16S
+	instTable[binary.I64Load16U] = i64Load16U
+	instTable[binary.I64Load32S] = i64Load32S
+	instTable[binary.I64Load32U] = i64Load32U
+	instTable[binary.I32Store] = i32Store
+	instTable[binary.I64Store] = i64Store
+	instTable[binary.F32Store] = f32Store
+	instTable[binary.F64Store] = f64Store
+	instTable[binary.I32Store8] = i32Store8
+	instTable[binary.I32Store16] = i32Store16
+	instTable[binary.I64Store8] = i64Store8
+	instTable[binary.I64Store16] = i64Store16
+	instTable[binary.I64Store32] = i64Store32
+	instTable[binary.MemorySize] = memorySize
+	instTable[binary.MemoryGrow] = memoryGrow
 
-// 执行指定函数
-// 返回操作数栈的内容，用于测试
-func ExecFunc(module binary.Module, func_idx uint32) []uint64 {
-	v := &vm{module: module}
-	v.execCode(func_idx)
-	return v.operandStack.slots
-}
+	// 函数指令
+	instTable[binary.Call] = call // hack!
 
-// 执行指定函数
-func (v *vm) execCode(func_idx uint32) {
-	code := v.module.CodeSec[func_idx]
-	for _, inst := range code.Expr {
-		v.execInst(inst)
-	}
-}
-
-// 执行一条指令
-func (v *vm) execInst(inst binary.Instruction) {
-	instTable[inst.Opcode](v, inst.Args)
 }

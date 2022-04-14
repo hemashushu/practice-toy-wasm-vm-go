@@ -29,7 +29,9 @@ func AssertSliceEqual[T comparable](t *testing.T, expected []T, actual []T) {
 	}
 
 	for i := range expected {
-		AssertEqual(t, expected[i], actual[i])
+		if expected[i] != actual[i] {
+			t.Fatalf("index: %d, expected: %v, actual: %v", i, expected[i], actual[i])
+		}
 	}
 }
 

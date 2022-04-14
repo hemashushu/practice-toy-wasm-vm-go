@@ -7,17 +7,20 @@ type operandStack struct {
 	slots []uint64
 }
 
+// 部分指令是明确注明是将整数解析为有符号数再进行运算，
+// 比如 lt_u, lt_s，所以需要将整数以符号数来压入和弹出的操作
+
 // -------- 压入
 
 func (s *operandStack) pushU64(val uint64) {
 	s.slots = append(s.slots, val)
 }
 
-func (s *operandStack) pushS64(val int64) {
+func (s *operandStack) pushU32(val uint32) {
 	s.pushU64(uint64(val))
 }
 
-func (s *operandStack) pushU32(val uint32) {
+func (s *operandStack) pushS64(val int64) {
 	s.pushU64(uint64(val))
 }
 
