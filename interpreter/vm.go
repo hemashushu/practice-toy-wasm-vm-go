@@ -6,8 +6,61 @@ import (
 
 type vm struct {
 	operandStack operandStack
+	controlStack controlStack
 	module       binary.Module
 	memory       *memory
+
+	// 全局变量表
+	globals []*globalVar
+
+	// 记录第一个局部变量（包括函数参数）在栈中的位置，用于
+	// 方便按索引访问栈中的局部变量，它的值等于从栈顶开始
+	// 第一个 `函数调用帧` 的 BP（base pointer）
+	// 对于函数内的流程控制所产生帧，不更新 local0Idx 的值。
+	local0Idx uint32 // name: currentCallFrameBasePointer
+
+	// 注：
+	// 目前局部变量（包括函数参数）表直接在操作栈中实现
+}
+
+func (v *vm) enterBlock(opcode byte, bt binary.FuncType,
+	instructions []binary.Instruction) {
+	bp := v.operandStack.stackSize() - len(bt.ParamTypes)
+	frame := newControlFrame(opcode, bt, instructions, bp)
+	v.controlStack.pushControlFrame(frame)
+
+	if opcode == binary.Call {
+		v.local0Idx = uint32(bp)
+	}
+}
+
+func (v *vm) exitBlock() { // name: leaveBlock
+	frame := v.controlStack.popControlFrame() // 消掉当前控制帧
+	v.clearBlock(frame)                       // 做一些离开 `被调用者` 之后的清理工作
+}
+
+func (v *vm) clearBlock(frame *controlFrame) {
+	// 丢弃自当前函数 bp (base pointer) 以后产生的所有操作数槽，防止 `被调用者` 产生的
+	// 残留数据。
+	residues := v.operandStack.stackSize() - frame.bp - len(frame.bt.ResultTypes)
+
+	if residues > 0 {
+		// 先弹出有用的数据（即返回值）
+		returnValues := v.operandStack.popU64Values(len(frame.bt.ResultTypes))
+		// 丢弃残留数据
+		v.operandStack.popU64Values(residues)
+		// 再压入有用的数据
+		v.operandStack.pushU64Values(returnValues)
+	}
+
+	// 如果当前是函数退出，则还需要
+	// 更新 local0Idx 的值
+	if frame.opcode == binary.Call &&
+		v.controlStack.controlDepth() > 0 {
+		lastCallFrame, _ := v.controlStack.topCallFrame()
+		v.local0Idx = uint32(lastCallFrame.bp)
+	}
+
 }
 
 type instFn = func(v *vm, args interface{})
@@ -20,17 +73,12 @@ func (v *vm) initMem() {
 	if len(v.module.MemSec) != 0 {
 		v.memory = newMemory(v.module.MemSec[0])
 	}
-}
 
-func (v *vm) initMemWithInitData(init_data []byte) {
-	v.memory = newMemoryWithInitData(init_data)
-}
-
-func (v *vm) initData() {
+	// 读取 Data 段，初始化内存块的内容
 	for _, dataItem := range v.module.DataSec {
 		// 执行偏移值表达式（通常是一个 i32.const 指令）
 		for _, offsetInst := range dataItem.Offset {
-			v.execInst(offsetInst)
+			v.execInstruction(offsetInst)
 		}
 
 		// 操作数栈的顶端操作数————即偏移值表达式的运算结果————表示内存的有效地址
@@ -39,10 +87,14 @@ func (v *vm) initData() {
 	}
 }
 
+func (v *vm) initMemWithInitData(init_data []byte) {
+	v.memory = newMemoryWithInitData(init_data)
+}
+
 func ExecMainFunc(module binary.Module) {
 	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec)) // 导入函数也会占用函数索引
 	v := &vm{module: module}
-	v.execCode(func_idx)
+	v.execFunc(func_idx)
 }
 
 // 执行指定函数
@@ -50,16 +102,14 @@ func ExecMainFunc(module binary.Module) {
 func TestFunc(module binary.Module, func_idx uint32) ([]uint64, []byte) {
 	v := &vm{module: module}
 	v.initMem()
-	v.initData()
-	v.execCode(func_idx)
+	v.execFunc(func_idx)
 	return v.operandStack.slots, dumpMemory(v.memory)
 }
 
 func TestFuncWithInitMemoryData(module binary.Module, init_data []byte, func_idx uint32) ([]uint64, []byte) {
 	v := &vm{module: module}
 	v.initMemWithInitData(init_data)
-	// 这里不执行 Data 段的指令
-	v.execCode(func_idx)
+	v.execFunc(func_idx)
 	return v.operandStack.slots, dumpMemory(v.memory)
 }
 
@@ -72,15 +122,35 @@ func dumpMemory(m *memory) []byte {
 }
 
 // 执行指定函数
-func (v *vm) execCode(func_idx uint32) {
-	code := v.module.CodeSec[func_idx]
-	for _, inst := range code.Expr {
-		v.execInst(inst)
+func (v *vm) execFunc(func_idx uint32) {
+	//code := v.module.CodeSec[func_idx]
+	// for _, inst := range code.Expr {
+	// 	v.execInst(inst)
+	// }
+
+	call(v, func_idx)
+
+	// 程序的入口是一个模块内部的用户自定义函数，调用 call 方法之后，控制栈
+	// 应该有 1 个栈帧，所以这里的 depth 值为 1
+	// todo::
+	// 按理说下面的循环可以简化成
+	// `for v.controlStack.controlDepth()  >= 1 {`
+
+	depth := v.controlStack.controlDepth()
+	for v.controlStack.controlDepth() >= depth {
+		frame := v.controlStack.topControlFrame()
+		if frame.pc == len(frame.instructions) {
+			v.exitBlock()
+		} else {
+			instr := frame.instructions[frame.pc]
+			frame.pc++ // 向前移动一个指令
+			v.execInstruction(instr)
+		}
 	}
 }
 
 // 执行一条指令
-func (v *vm) execInst(inst binary.Instruction) {
+func (v *vm) execInstruction(inst binary.Instruction) {
 	instTable[inst.Opcode](v, inst.Args)
 }
 

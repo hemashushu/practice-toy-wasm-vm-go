@@ -1,5 +1,5 @@
 (module
-    (func $f0
+    (func $f0 (result i32 i32)
         (i32.const 100)
         ;; 测试值不为 0，应该选中替代项 123
         ;;
@@ -12,13 +12,13 @@
         (select (i32.const 123) (i32.const 456) (i32.const 1))
     )
 
-    (func $f1
+    (func $f1 (result i32 i32)
         (i32.const 100)
         ;; 测试值不为 0，应该选中结果项 456
         (select (i32.const 123) (i32.const 456) (i32.const 0))
     )
 
-    (func $f2
+    (func $f2 (result i32)
         (i32.const 123)
         (i32.const 456)
         ;; drop 一次，弹出了 456
@@ -33,7 +33,7 @@
         (drop)
     )
 
-    (func $f4
+    (func $f4 (result i32 i32)
         (i32.const 100)
         ;; -- 栈顶 --
         ;; 456 <-- 被 drop

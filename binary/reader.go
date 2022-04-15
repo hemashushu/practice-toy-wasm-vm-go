@@ -111,24 +111,6 @@ func (r *wasmReader) remaining() int {
 	return len(r.data)
 }
 
-func (module Module) GetBlockType(bt BlockType) FuncType {
-	switch bt {
-	case BlockTypeI32:
-		return FuncType{ResultTypes: []ValType{ValTypeI32}}
-	case BlockTypeI64:
-		return FuncType{ResultTypes: []ValType{ValTypeI64}}
-	case BlockTypeF32:
-		return FuncType{ResultTypes: []ValType{ValTypeF32}}
-	case BlockTypeF64:
-		return FuncType{ResultTypes: []ValType{ValTypeF64}}
-	case BlockTypeEmpty:
-		return FuncType{}
-	default:
-		// todo:: 检查是否符合规范
-		return module.TypeSec[bt]
-	}
-}
-
 // ---------------- 解码模块
 
 func (r *wasmReader) readModule(m *Module) {

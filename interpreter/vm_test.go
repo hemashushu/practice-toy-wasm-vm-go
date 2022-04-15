@@ -17,20 +17,20 @@ func TestInstConst(t *testing.T) {
 	assert.AssertSliceEqual(t, []uint64{123, 456}, slots1)
 }
 
-func TestInstOperand(t *testing.T) {
-	slots0 := runFuncAndGetStack("test-vm-operand.wasm", 0)
+func TestInstParametric(t *testing.T) {
+	slots0 := runFuncAndGetStack("test-vm-parametric.wasm", 0)
 	assert.AssertSliceEqual(t, []uint64{100, 123}, slots0)
 
-	slots1 := runFuncAndGetStack("test-vm-operand.wasm", 1)
+	slots1 := runFuncAndGetStack("test-vm-parametric.wasm", 1)
 	assert.AssertSliceEqual(t, []uint64{100, 456}, slots1)
 
-	slots2 := runFuncAndGetStack("test-vm-operand.wasm", 2)
+	slots2 := runFuncAndGetStack("test-vm-parametric.wasm", 2)
 	assert.AssertSliceEqual(t, []uint64{123}, slots2)
 
-	slots3 := runFuncAndGetStack("test-vm-operand.wasm", 3)
+	slots3 := runFuncAndGetStack("test-vm-parametric.wasm", 3)
 	assert.AssertTrue(t, len(slots3) == 0)
 
-	slots4 := runFuncAndGetStack("test-vm-operand.wasm", 4)
+	slots4 := runFuncAndGetStack("test-vm-parametric.wasm", 4)
 	assert.AssertSliceEqual(t, []uint64{100, 123}, slots4)
 }
 
@@ -81,7 +81,6 @@ func TestInstCompare(t *testing.T) {
 	assert.AssertSliceEqual(t, []uint64{11, 1}, runFuncAndGetStack("test-vm-compare.wasm", 25))
 	assert.AssertSliceEqual(t, []uint64{11, 1}, runFuncAndGetStack("test-vm-compare.wasm", 26))
 	assert.AssertSliceEqual(t, []uint64{11, 1}, runFuncAndGetStack("test-vm-compare.wasm", 27))
-
 }
 
 func TestInstUnary(t *testing.T) {

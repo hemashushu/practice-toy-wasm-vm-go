@@ -16,7 +16,7 @@
     (data 0 (offset (i32.const 32)) "hello")
     (data 0 (offset (i32.const 40)) "中文")
 
-    (func $f0
+    (func $f0 (result i32 i32 i32 i64 i64 i64)
         ;; 读第 1 个数
         (i32.const 0)
         (i32.load8_u)
@@ -42,7 +42,7 @@
         (i64.load8_u)
     )
 
-    (func $f1
+    (func $f1 (result i32)
         ;; 写 uint8 0xaa 到地址 00
         (i32.const 0)
         (i32.const 0xaa)

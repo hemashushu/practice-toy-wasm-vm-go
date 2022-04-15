@@ -1,6 +1,6 @@
 (module
     (memory 1)
-    (func $f0
+    (func $f0 (result i32 i32 i32 i32)
         ;; 写入两个 i32 数
 
         (i32.const 0)

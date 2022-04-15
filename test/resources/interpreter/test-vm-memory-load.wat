@@ -7,13 +7,13 @@
 ;; /* addr: 14..21 */ 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0,
 
 (module
-    (func $f0
+    (func $f0 (result i32)
         (i32.const 0)
         (i32.load8_u offset=0)
     )
 
     ;; 测试只改变 offset 立即数
-    (func $f1
+    (func $f1 (result i32 i32 i32 i32)
         (i32.const 0)
         (i32.load8_u offset=0)
         (i32.const 0)
@@ -25,7 +25,7 @@
     )
 
     ;; 测试只改变地址
-    (func $f2
+    (func $f2 (result i32 i32 i32 i32)
         (i32.const 0)
         (i32.load8_u offset=0)
         (i32.const 1)
@@ -37,7 +37,7 @@
     )
 
     ;; 测试以符号数来加载
-    (func $f3
+    (func $f3 (result i32 i32 i32 i32)
         (i32.const 0)
         (i32.load8_u offset=0) ;; 17
         (i32.const 0)
@@ -49,7 +49,7 @@
     )
 
     ;; 测试加载 16 位, 32 位数
-    (func $4
+    (func $4 (result i32 i32 i32 i32 i32)
         (i32.const 2)
         (i32.load16_u) ;; 0x6655
         (i32.const 2)
@@ -64,7 +64,7 @@
     )
 
     ;; 测试加载 64 位数
-    (func $5
+    (func $5 (result i64 i64 i64 i64 i64 i64)
         (i32.const 6)
         (i64.load32_u) ;; 0x03020100
         (i32.const 6)

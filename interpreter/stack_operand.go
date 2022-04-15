@@ -78,3 +78,40 @@ func (s *operandStack) popBool() bool {
 	// 使用 int32（有符号） 作为 boolean 型的数据类型
 	return s.popS32() != 0
 }
+
+// -------- 用于实现调用栈的方法
+
+// 栈的总大小，当前函数调用帧的实现方法是，把所有调用栈都由同一个栈来实现，所以
+// sp, bp 等数值都是针对整个栈而言的
+func (s *operandStack) stackSize() int {
+	return len(s.slots)
+}
+
+// 按索引来获取栈的操作数
+// 用于函数调用的实参以及局部变量的读写
+func (s *operandStack) getOperand(idx uint32) uint64 {
+	return s.slots[idx]
+}
+
+// 按索引来设置栈的操作数
+// 用于函数调用的实参以及局部变量的读写
+func (s *operandStack) setOperand(idx uint32, val uint64) {
+	s.slots[idx] = val
+}
+
+func (s *operandStack) pushU64Values(vals []uint64) {
+	s.slots = append(s.slots, vals...)
+}
+
+func (s *operandStack) popU64Values(count int) []uint64 {
+	pos := len(s.slots) - count
+	vals := s.slots[pos:]
+	s.slots = s.slots[:pos]
+	return vals
+}
+
+func (s *operandStack) peekU64() uint64 {
+	lastIdx := len(s.slots) - 1
+	val := s.slots[lastIdx]
+	return val
+}

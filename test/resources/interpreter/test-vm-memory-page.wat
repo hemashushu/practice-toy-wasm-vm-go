@@ -1,10 +1,10 @@
 (module
     (memory 2 10)
-    (func $f0
+    (func $f0 (result i32 i32)
         (i32.const 10)
         (memory.size)
     )
-    (func $f1
+    (func $f1 (result i32 i32 i32 i32)
         (i32.const 10)
         (i32.const 2)
         (memory.grow)

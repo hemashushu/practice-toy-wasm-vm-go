@@ -427,6 +427,34 @@ type Locals struct {
 	Type ValType // 类型
 }
 
+// 辅助函数
+// 用于将 block 的返回类型跟函数的签名（function type）统一起来，
+// 因为 block type 都是负数，所以不会跟 function type 的索引冲突
+func (module Module) GetBlockType(bt BlockType) FuncType {
+	switch bt {
+	case BlockTypeI32: // -1
+		return FuncType{ResultTypes: []ValType{ValTypeI32}}
+	case BlockTypeI64: // -2
+		return FuncType{ResultTypes: []ValType{ValTypeI64}}
+	case BlockTypeF32: // -3
+		return FuncType{ResultTypes: []ValType{ValTypeF32}}
+	case BlockTypeF64: // -4
+		return FuncType{ResultTypes: []ValType{ValTypeF64}}
+	case BlockTypeEmpty: // -64
+		return FuncType{}
+	default:
+		return module.TypeSec[bt]
+	}
+}
+
+func (code Code) GetLocalCount() uint64 {
+	n := uint64(0)
+	for _, locals := range code.Locals {
+		n += uint64(locals.N)
+	}
+	return n
+}
+
 // ---------------- 数据段
 
 // 数据段跟元素段类似，存储内存的初始化数据
