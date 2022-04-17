@@ -414,6 +414,28 @@ type Elem struct {
 // locals: local_count + val_type
 //
 // code 项开头的 byte_count 表示该项目的内容大小，包括表达式结尾的 0x0B
+//
+// 示例：
+//
+// (func (param $a i32) (param $b i32)
+// 	(local $la i32)
+// 	(local $lb i32)
+// 	(local i64 i64)
+// 	(global.get $g1)
+// 	(global.set $g2)
+// 	(local.get $a)
+// 	(local.set $b)
+// )
+//
+// - 0e          | size of function
+// - 02          | 2 local blocks
+// - 02 7f       | 2 locals of type I32
+// - 02 7e       | 2 locals of type I64
+// - 23 00       | GlobalGet { global_index: 0 }
+// - 24 01       | GlobalSet { global_index: 1 }
+// - 20 00       | LocalGet { local_index: 0 }
+// - 21 01       | LocalSet { local_index: 1 }
+// - 0b          | End
 
 // 代码项目（一个函数一个代码项目）
 type Code struct {
@@ -430,7 +452,7 @@ type Locals struct {
 // 辅助函数
 // 用于将 block 的返回类型跟函数的签名（function type）统一起来，
 // 因为 block type 都是负数，所以不会跟 function type 的索引冲突
-func (module Module) GetBlockType(bt BlockType) FuncType {
+func (module Module) GetBlockType(bt BlockType) FuncType { // name: convertBlockTypeIntoFunctionType
 	switch bt {
 	case BlockTypeI32: // -1
 		return FuncType{ResultTypes: []ValType{ValTypeI32}}

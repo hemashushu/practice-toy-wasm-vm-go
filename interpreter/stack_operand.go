@@ -99,18 +99,18 @@ func (s *operandStack) setOperand(idx uint32, val uint64) {
 	s.slots[idx] = val
 }
 
-func (s *operandStack) pushU64Values(vals []uint64) {
+func (s *operandStack) pushValues(vals []uint64) {
 	s.slots = append(s.slots, vals...)
 }
 
-func (s *operandStack) popU64Values(count int) []uint64 {
+func (s *operandStack) popValues(count int) []uint64 {
 	pos := len(s.slots) - count
 	vals := s.slots[pos:]
 	s.slots = s.slots[:pos]
 	return vals
 }
 
-func (s *operandStack) peekU64() uint64 {
+func (s *operandStack) peekValue() uint64 {
 	lastIdx := len(s.slots) - 1
 	val := s.slots[lastIdx]
 	return val

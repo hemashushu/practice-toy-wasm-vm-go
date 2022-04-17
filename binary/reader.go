@@ -82,6 +82,14 @@ func (r *wasmReader) readVarS64() int64 {
 	return value
 }
 
+func (r *wasmReader) readVarU32Array() []uint32 {
+	vec := make([]uint32, r.readVarU32())
+	for i := range vec {
+		vec[i] = r.readVarU32()
+	}
+	return vec
+}
+
 // 读取字节数组
 // 项目内容的长度位于开头的一个 uint32 数字
 func (r *wasmReader) readBytes() []byte {
@@ -561,9 +569,9 @@ func (r *wasmReader) readArgs(opcode byte) interface{} {
 	// 跳转指令
 
 	case Br, BrIf:
-		return r.readVarU32() // label_idx
+		return r.readVarU32() // label_idx:uint32
 	case BrTable:
-		return r.readBrTableArgs()
+		return r.readBrTableArgs() // label_idx:uint32 label_idx:uint32 ...
 
 	// 函数调用指令
 
@@ -618,7 +626,7 @@ func (r *wasmReader) readIfArgs() (args IfArgs) {
 
 func (r *wasmReader) readBrTableArgs() BrTableArgs {
 	return BrTableArgs{
-		Labels:  r.readFuncIndices(),
+		Labels:  r.readVarU32Array(), // label_idx:uint32 label_idx:uint32 ...
 		Default: r.readVarU32(),
 	}
 }

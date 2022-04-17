@@ -246,6 +246,20 @@ func TestInstMemoryGrow(t *testing.T) {
 	}, runFuncAndGetStack("test-vm-memory-grow.wasm", 0))
 }
 
+func TestInstFunctionCall(t *testing.T) {
+	n1 := -5
+
+	assert.AssertSliceEqual(t, []uint64{3}, runFuncAndGetStack("test-vm-function-call.wasm", 0))
+	assert.AssertSliceEqual(t, []uint64{1}, runFuncAndGetStack("test-vm-function-call.wasm", 1))
+	assert.AssertSliceEqual(t, []uint64{uint64(uint32(n1))}, runFuncAndGetStack("test-vm-function-call.wasm", 2))
+}
+
+func TestInstControl(t *testing.T) {
+	assert.AssertSliceEqual(t, []uint64{1}, runFuncAndGetStack("test-vm-control.wasm", 0))
+	assert.AssertSliceEqual(t, []uint64{2}, runFuncAndGetStack("test-vm-control.wasm", 1))
+	assert.AssertSliceEqual(t, []uint64{3}, runFuncAndGetStack("test-vm-control.wasm", 2))
+}
+
 func assertPartialMemoryData(t *testing.T, expected []byte, actual []byte) {
 	partial := make([]byte, len(expected))
 	copy(partial, actual)

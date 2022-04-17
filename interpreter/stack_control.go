@@ -1,6 +1,9 @@
 package interpreter
 
-import "wasmvm/binary"
+import (
+	"errors"
+	"wasmvm/binary"
+)
 
 // 当前的 vm 实现共用调用帧以及流程控制的块帧，所以
 // 称为 `控制帧`（`controlFrame`）。
@@ -84,14 +87,28 @@ func (s *controlStack) topControlFrame() *controlFrame { // name: topFrame
 	return s.frames[len(s.frames)-1]
 }
 
-// 获取最后的一个**调用栈**的帧，即排除控制栈的帧。
-// 返回调用帧以及该帧距离栈顶的距离（比如，如果栈顶帧就是调用帧，则距离为 0）
-func (s *controlStack) topCallFrame() (*controlFrame, int) { // name: topCallFrame
+// 获取最后的一个**调用帧**（非结构控制帧）
+func (s *controlStack) topCallFrame() *controlFrame {
 	for idx := len(s.frames) - 1; idx >= 0; idx-- {
 		if f := s.frames[idx]; f.opcode == binary.Call {
-			return f, len(s.frames) - 1 - idx
+			return f
 		}
 	}
 
-	return nil, -1
+	panic(errors.New("call frame not found"))
+}
+
+// 返回当前帧距离调用帧（即当前函数）的相对于函数的深度
+// 注：函数也是一个 block
+// 如果是在函数层获取，则返回 0，
+// 如果是在一层 block 里获取，则返回 1
+// 如果是在两层 block 里获取，则返回 2
+func (s *controlStack) getRelativeDepth() int {
+	for idx := len(s.frames) - 1; idx >= 0; idx-- {
+		if frame := s.frames[idx]; frame.opcode == binary.Call {
+			return len(s.frames) - 1 - idx
+		}
+	}
+
+	panic(errors.New("control stack error"))
 }

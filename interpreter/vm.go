@@ -23,10 +23,10 @@ type vm struct {
 	// 目前局部变量（包括函数参数）表直接在操作栈中实现
 }
 
-func (v *vm) enterBlock(opcode byte, bt binary.FuncType,
+func (v *vm) enterBlock(opcode byte, func_type binary.FuncType,
 	instructions []binary.Instruction) {
-	bp := v.operandStack.stackSize() - len(bt.ParamTypes)
-	frame := newControlFrame(opcode, bt, instructions, bp)
+	bp := v.operandStack.stackSize() - len(func_type.ParamTypes)
+	frame := newControlFrame(opcode, func_type, instructions, bp)
 	v.controlStack.pushControlFrame(frame)
 
 	if opcode == binary.Call {
@@ -39,34 +39,47 @@ func (v *vm) exitBlock() { // name: leaveBlock
 	v.clearBlock(frame)                       // 做一些离开 `被调用者` 之后的清理工作
 }
 
+// todo:: 考虑把 clearBlock 函数合并到 exitBlock
 func (v *vm) clearBlock(frame *controlFrame) {
+	// 这里的 controlFrame 是退出的 `目标层`，而不是 `源层`
+
 	// 丢弃自当前函数 bp (base pointer) 以后产生的所有操作数槽，防止 `被调用者` 产生的
 	// 残留数据。
 	residues := v.operandStack.stackSize() - frame.bp - len(frame.bt.ResultTypes)
 
 	if residues > 0 {
 		// 先弹出有用的数据（即返回值）
-		returnValues := v.operandStack.popU64Values(len(frame.bt.ResultTypes))
+		returnValues := v.operandStack.popValues(len(frame.bt.ResultTypes))
 		// 丢弃残留数据
-		v.operandStack.popU64Values(residues)
+		v.operandStack.popValues(residues)
 		// 再压入有用的数据
-		v.operandStack.pushU64Values(returnValues)
+		v.operandStack.pushValues(returnValues)
 	}
 
 	// 如果当前是函数退出，则还需要
 	// 更新 local0Idx 的值
 	if frame.opcode == binary.Call &&
 		v.controlStack.controlDepth() > 0 {
-		lastCallFrame, _ := v.controlStack.topCallFrame()
+		lastCallFrame := v.controlStack.topCallFrame()
 		v.local0Idx = uint32(lastCallFrame.bp)
 	}
 
 }
 
-type instFn = func(v *vm, args interface{})
+func (v *vm) resetBlock(frame *controlFrame) {
+	// 注意这里要弹出目标层参数所需数量的操作数，而不是 `源层` 的返回值数量的操作数。
+	targetBlockArguments := v.operandStack.popValues(len(frame.bt.ParamTypes))
+
+	// 丢弃目标层 bp 到栈顶的数据
+	v.operandStack.popValues(v.operandStack.stackSize() - frame.bp)
+
+	v.operandStack.pushValues(targetBlockArguments)
+}
+
+type instructionExecFunc = func(v *vm, args interface{})
 
 // 指令的解析/执行函数表
-var instTable = make([]instFn, 256)
+var instructionTable = make([]instructionExecFunc, 256)
 
 func (v *vm) initMem() {
 	// 当前 wasm 只支持创建一个内存块
@@ -130,6 +143,10 @@ func (v *vm) execFunc(func_idx uint32) {
 
 	call(v, func_idx)
 
+	// 	v.loop()
+	// }
+	// func (v *vm) loop() {
+
 	// 程序的入口是一个模块内部的用户自定义函数，调用 call 方法之后，控制栈
 	// 应该有 1 个栈帧，所以这里的 depth 值为 1
 	// todo::
@@ -151,177 +168,194 @@ func (v *vm) execFunc(func_idx uint32) {
 
 // 执行一条指令
 func (v *vm) execInstruction(inst binary.Instruction) {
-	instTable[inst.Opcode](v, inst.Args)
+	instructionTable[inst.Opcode](v, inst.Args)
 }
 
 func init() {
+	// 控制指令
+	instructionTable[binary.Unreachable] = unreachable
+	instructionTable[binary.Nop] = nop
+	instructionTable[binary.Block] = block
+	instructionTable[binary.Loop] = loop
+	instructionTable[binary.If] = if_
+	instructionTable[binary.Br] = br
+	instructionTable[binary.BrIf] = brIf
+	instructionTable[binary.BrTable] = brTable
+	instructionTable[binary.Return] = return_
+
 	// 操作数（参数 parameter）指令
-	instTable[binary.Drop] = drop
-	instTable[binary.Select] = select_
+	instructionTable[binary.Drop] = drop
+	instructionTable[binary.Select] = select_
 
 	// 数值指令
-	instTable[binary.I32Const] = i32Const
-	instTable[binary.I64Const] = i64Const
-	instTable[binary.F32Const] = f32Const
-	instTable[binary.F64Const] = f64Const
-	instTable[binary.I32Eqz] = i32Eqz
-	instTable[binary.I32Eq] = i32Eq
-	instTable[binary.I32Ne] = i32Ne
-	instTable[binary.I32LtS] = i32LtS
-	instTable[binary.I32LtU] = i32LtU
-	instTable[binary.I32GtS] = i32GtS
-	instTable[binary.I32GtU] = i32GtU
-	instTable[binary.I32LeS] = i32LeS
-	instTable[binary.I32LeU] = i32LeU
-	instTable[binary.I32GeS] = i32GeS
-	instTable[binary.I32GeU] = i32GeU
-	instTable[binary.I64Eqz] = i64Eqz
-	instTable[binary.I64Eq] = i64Eq
-	instTable[binary.I64Ne] = i64Ne
-	instTable[binary.I64LtS] = i64LtS
-	instTable[binary.I64LtU] = i64LtU
-	instTable[binary.I64GtS] = i64GtS
-	instTable[binary.I64GtU] = i64GtU
-	instTable[binary.I64LeS] = i64LeS
-	instTable[binary.I64LeU] = i64LeU
-	instTable[binary.I64GeS] = i64GeS
-	instTable[binary.I64GeU] = i64GeU
-	instTable[binary.F32Eq] = f32Eq
-	instTable[binary.F32Ne] = f32Ne
-	instTable[binary.F32Lt] = f32Lt
-	instTable[binary.F32Gt] = f32Gt
-	instTable[binary.F32Le] = f32Le
-	instTable[binary.F32Ge] = f32Ge
-	instTable[binary.F64Eq] = f64Eq
-	instTable[binary.F64Ne] = f64Ne
-	instTable[binary.F64Lt] = f64Lt
-	instTable[binary.F64Gt] = f64Gt
-	instTable[binary.F64Le] = f64Le
-	instTable[binary.F64Ge] = f64Ge
-	instTable[binary.I32Clz] = i32Clz
-	instTable[binary.I32Ctz] = i32Ctz
-	instTable[binary.I32PopCnt] = i32PopCnt
-	instTable[binary.I32Add] = i32Add
-	instTable[binary.I32Sub] = i32Sub
-	instTable[binary.I32Mul] = i32Mul
-	instTable[binary.I32DivS] = i32DivS
-	instTable[binary.I32DivU] = i32DivU
-	instTable[binary.I32RemS] = i32RemS
-	instTable[binary.I32RemU] = i32RemU
-	instTable[binary.I32And] = i32And
-	instTable[binary.I32Or] = i32Or
-	instTable[binary.I32Xor] = i32Xor
-	instTable[binary.I32Shl] = i32Shl
-	instTable[binary.I32ShrS] = i32ShrS
-	instTable[binary.I32ShrU] = i32ShrU
-	instTable[binary.I32Rotl] = i32Rotl
-	instTable[binary.I32Rotr] = i32Rotr
-	instTable[binary.I64Clz] = i64Clz
-	instTable[binary.I64Ctz] = i64Ctz
-	instTable[binary.I64PopCnt] = i64PopCnt
-	instTable[binary.I64Add] = i64Add
-	instTable[binary.I64Sub] = i64Sub
-	instTable[binary.I64Mul] = i64Mul
-	instTable[binary.I64DivS] = i64DivS
-	instTable[binary.I64DivU] = i64DivU
-	instTable[binary.I64RemS] = i64RemS
-	instTable[binary.I64RemU] = i64RemU
-	instTable[binary.I64And] = i64And
-	instTable[binary.I64Or] = i64Or
-	instTable[binary.I64Xor] = i64Xor
-	instTable[binary.I64Shl] = i64Shl
-	instTable[binary.I64ShrS] = i64ShrS
-	instTable[binary.I64ShrU] = i64ShrU
-	instTable[binary.I64Rotl] = i64Rotl
-	instTable[binary.I64Rotr] = i64Rotr
-	instTable[binary.F32Abs] = f32Abs
-	instTable[binary.F32Neg] = f32Neg
-	instTable[binary.F32Ceil] = f32Ceil
-	instTable[binary.F32Floor] = f32Floor
-	instTable[binary.F32Trunc] = f32Trunc
-	instTable[binary.F32Nearest] = f32Nearest
-	instTable[binary.F32Sqrt] = f32Sqrt
-	instTable[binary.F32Add] = f32Add
-	instTable[binary.F32Sub] = f32Sub
-	instTable[binary.F32Mul] = f32Mul
-	instTable[binary.F32Div] = f32Div
-	instTable[binary.F32Min] = f32Min
-	instTable[binary.F32Max] = f32Max
-	instTable[binary.F32CopySign] = f32CopySign
-	instTable[binary.F64Abs] = f64Abs
-	instTable[binary.F64Neg] = f64Neg
-	instTable[binary.F64Ceil] = f64Ceil
-	instTable[binary.F64Floor] = f64Floor
-	instTable[binary.F64Trunc] = f64Trunc
-	instTable[binary.F64Nearest] = f64Nearest
-	instTable[binary.F64Sqrt] = f64Sqrt
-	instTable[binary.F64Add] = f64Add
-	instTable[binary.F64Sub] = f64Sub
-	instTable[binary.F64Mul] = f64Mul
-	instTable[binary.F64Div] = f64Div
-	instTable[binary.F64Min] = f64Min
-	instTable[binary.F64Max] = f64Max
-	instTable[binary.F64CopySign] = f64CopySign
-	instTable[binary.I32WrapI64] = i32WrapI64
-	instTable[binary.I32TruncF32S] = i32TruncF32S
-	instTable[binary.I32TruncF32U] = i32TruncF32U
-	instTable[binary.I32TruncF64S] = i32TruncF64S
-	instTable[binary.I32TruncF64U] = i32TruncF64U
-	instTable[binary.I64ExtendI32S] = i64ExtendI32S
-	instTable[binary.I64ExtendI32U] = i64ExtendI32U
-	instTable[binary.I64TruncF32S] = i64TruncF32S
-	instTable[binary.I64TruncF32U] = i64TruncF32U
-	instTable[binary.I64TruncF64S] = i64TruncF64S
-	instTable[binary.I64TruncF64U] = i64TruncF64U
-	instTable[binary.F32ConvertI32S] = f32ConvertI32S
-	instTable[binary.F32ConvertI32U] = f32ConvertI32U
-	instTable[binary.F32ConvertI64S] = f32ConvertI64S
-	instTable[binary.F32ConvertI64U] = f32ConvertI64U
-	instTable[binary.F32DemoteF64] = f32DemoteF64
-	instTable[binary.F64ConvertI32S] = f64ConvertI32S
-	instTable[binary.F64ConvertI32U] = f64ConvertI32U
-	instTable[binary.F64ConvertI64S] = f64ConvertI64S
-	instTable[binary.F64ConvertI64U] = f64ConvertI64U
-	instTable[binary.F64PromoteF32] = f64PromoteF32
-	instTable[binary.I32ReinterpretF32] = i32ReinterpretF32
-	instTable[binary.I64ReinterpretF64] = i64ReinterpretF64
-	instTable[binary.F32ReinterpretI32] = f32ReinterpretI32
-	instTable[binary.F64ReinterpretI64] = f64ReinterpretI64
-	instTable[binary.I32Extend8S] = i32Extend8S
-	instTable[binary.I32Extend16S] = i32Extend16S
-	instTable[binary.I64Extend8S] = i64Extend8S
-	instTable[binary.I64Extend16S] = i64Extend16S
-	instTable[binary.I64Extend32S] = i64Extend32S
-	instTable[binary.TruncSat] = truncSat
+	instructionTable[binary.I32Const] = i32Const
+	instructionTable[binary.I64Const] = i64Const
+	instructionTable[binary.F32Const] = f32Const
+	instructionTable[binary.F64Const] = f64Const
+	instructionTable[binary.I32Eqz] = i32Eqz
+	instructionTable[binary.I32Eq] = i32Eq
+	instructionTable[binary.I32Ne] = i32Ne
+	instructionTable[binary.I32LtS] = i32LtS
+	instructionTable[binary.I32LtU] = i32LtU
+	instructionTable[binary.I32GtS] = i32GtS
+	instructionTable[binary.I32GtU] = i32GtU
+	instructionTable[binary.I32LeS] = i32LeS
+	instructionTable[binary.I32LeU] = i32LeU
+	instructionTable[binary.I32GeS] = i32GeS
+	instructionTable[binary.I32GeU] = i32GeU
+	instructionTable[binary.I64Eqz] = i64Eqz
+	instructionTable[binary.I64Eq] = i64Eq
+	instructionTable[binary.I64Ne] = i64Ne
+	instructionTable[binary.I64LtS] = i64LtS
+	instructionTable[binary.I64LtU] = i64LtU
+	instructionTable[binary.I64GtS] = i64GtS
+	instructionTable[binary.I64GtU] = i64GtU
+	instructionTable[binary.I64LeS] = i64LeS
+	instructionTable[binary.I64LeU] = i64LeU
+	instructionTable[binary.I64GeS] = i64GeS
+	instructionTable[binary.I64GeU] = i64GeU
+	instructionTable[binary.F32Eq] = f32Eq
+	instructionTable[binary.F32Ne] = f32Ne
+	instructionTable[binary.F32Lt] = f32Lt
+	instructionTable[binary.F32Gt] = f32Gt
+	instructionTable[binary.F32Le] = f32Le
+	instructionTable[binary.F32Ge] = f32Ge
+	instructionTable[binary.F64Eq] = f64Eq
+	instructionTable[binary.F64Ne] = f64Ne
+	instructionTable[binary.F64Lt] = f64Lt
+	instructionTable[binary.F64Gt] = f64Gt
+	instructionTable[binary.F64Le] = f64Le
+	instructionTable[binary.F64Ge] = f64Ge
+	instructionTable[binary.I32Clz] = i32Clz
+	instructionTable[binary.I32Ctz] = i32Ctz
+	instructionTable[binary.I32PopCnt] = i32PopCnt
+	instructionTable[binary.I32Add] = i32Add
+	instructionTable[binary.I32Sub] = i32Sub
+	instructionTable[binary.I32Mul] = i32Mul
+	instructionTable[binary.I32DivS] = i32DivS
+	instructionTable[binary.I32DivU] = i32DivU
+	instructionTable[binary.I32RemS] = i32RemS
+	instructionTable[binary.I32RemU] = i32RemU
+	instructionTable[binary.I32And] = i32And
+	instructionTable[binary.I32Or] = i32Or
+	instructionTable[binary.I32Xor] = i32Xor
+	instructionTable[binary.I32Shl] = i32Shl
+	instructionTable[binary.I32ShrS] = i32ShrS
+	instructionTable[binary.I32ShrU] = i32ShrU
+	instructionTable[binary.I32Rotl] = i32Rotl
+	instructionTable[binary.I32Rotr] = i32Rotr
+	instructionTable[binary.I64Clz] = i64Clz
+	instructionTable[binary.I64Ctz] = i64Ctz
+	instructionTable[binary.I64PopCnt] = i64PopCnt
+	instructionTable[binary.I64Add] = i64Add
+	instructionTable[binary.I64Sub] = i64Sub
+	instructionTable[binary.I64Mul] = i64Mul
+	instructionTable[binary.I64DivS] = i64DivS
+	instructionTable[binary.I64DivU] = i64DivU
+	instructionTable[binary.I64RemS] = i64RemS
+	instructionTable[binary.I64RemU] = i64RemU
+	instructionTable[binary.I64And] = i64And
+	instructionTable[binary.I64Or] = i64Or
+	instructionTable[binary.I64Xor] = i64Xor
+	instructionTable[binary.I64Shl] = i64Shl
+	instructionTable[binary.I64ShrS] = i64ShrS
+	instructionTable[binary.I64ShrU] = i64ShrU
+	instructionTable[binary.I64Rotl] = i64Rotl
+	instructionTable[binary.I64Rotr] = i64Rotr
+	instructionTable[binary.F32Abs] = f32Abs
+	instructionTable[binary.F32Neg] = f32Neg
+	instructionTable[binary.F32Ceil] = f32Ceil
+	instructionTable[binary.F32Floor] = f32Floor
+	instructionTable[binary.F32Trunc] = f32Trunc
+	instructionTable[binary.F32Nearest] = f32Nearest
+	instructionTable[binary.F32Sqrt] = f32Sqrt
+	instructionTable[binary.F32Add] = f32Add
+	instructionTable[binary.F32Sub] = f32Sub
+	instructionTable[binary.F32Mul] = f32Mul
+	instructionTable[binary.F32Div] = f32Div
+	instructionTable[binary.F32Min] = f32Min
+	instructionTable[binary.F32Max] = f32Max
+	instructionTable[binary.F32CopySign] = f32CopySign
+	instructionTable[binary.F64Abs] = f64Abs
+	instructionTable[binary.F64Neg] = f64Neg
+	instructionTable[binary.F64Ceil] = f64Ceil
+	instructionTable[binary.F64Floor] = f64Floor
+	instructionTable[binary.F64Trunc] = f64Trunc
+	instructionTable[binary.F64Nearest] = f64Nearest
+	instructionTable[binary.F64Sqrt] = f64Sqrt
+	instructionTable[binary.F64Add] = f64Add
+	instructionTable[binary.F64Sub] = f64Sub
+	instructionTable[binary.F64Mul] = f64Mul
+	instructionTable[binary.F64Div] = f64Div
+	instructionTable[binary.F64Min] = f64Min
+	instructionTable[binary.F64Max] = f64Max
+	instructionTable[binary.F64CopySign] = f64CopySign
+	instructionTable[binary.I32WrapI64] = i32WrapI64
+	instructionTable[binary.I32TruncF32S] = i32TruncF32S
+	instructionTable[binary.I32TruncF32U] = i32TruncF32U
+	instructionTable[binary.I32TruncF64S] = i32TruncF64S
+	instructionTable[binary.I32TruncF64U] = i32TruncF64U
+	instructionTable[binary.I64ExtendI32S] = i64ExtendI32S
+	instructionTable[binary.I64ExtendI32U] = i64ExtendI32U
+	instructionTable[binary.I64TruncF32S] = i64TruncF32S
+	instructionTable[binary.I64TruncF32U] = i64TruncF32U
+	instructionTable[binary.I64TruncF64S] = i64TruncF64S
+	instructionTable[binary.I64TruncF64U] = i64TruncF64U
+	instructionTable[binary.F32ConvertI32S] = f32ConvertI32S
+	instructionTable[binary.F32ConvertI32U] = f32ConvertI32U
+	instructionTable[binary.F32ConvertI64S] = f32ConvertI64S
+	instructionTable[binary.F32ConvertI64U] = f32ConvertI64U
+	instructionTable[binary.F32DemoteF64] = f32DemoteF64
+	instructionTable[binary.F64ConvertI32S] = f64ConvertI32S
+	instructionTable[binary.F64ConvertI32U] = f64ConvertI32U
+	instructionTable[binary.F64ConvertI64S] = f64ConvertI64S
+	instructionTable[binary.F64ConvertI64U] = f64ConvertI64U
+	instructionTable[binary.F64PromoteF32] = f64PromoteF32
+	instructionTable[binary.I32ReinterpretF32] = i32ReinterpretF32
+	instructionTable[binary.I64ReinterpretF64] = i64ReinterpretF64
+	instructionTable[binary.F32ReinterpretI32] = f32ReinterpretI32
+	instructionTable[binary.F64ReinterpretI64] = f64ReinterpretI64
+	instructionTable[binary.I32Extend8S] = i32Extend8S
+	instructionTable[binary.I32Extend16S] = i32Extend16S
+	instructionTable[binary.I64Extend8S] = i64Extend8S
+	instructionTable[binary.I64Extend16S] = i64Extend16S
+	instructionTable[binary.I64Extend32S] = i64Extend32S
+	instructionTable[binary.TruncSat] = truncSat
 
 	// 内存指令
-	instTable[binary.I32Load] = i32Load
-	instTable[binary.I64Load] = i64Load
-	instTable[binary.F32Load] = f32Load
-	instTable[binary.F64Load] = f64Load
-	instTable[binary.I32Load8S] = i32Load8S
-	instTable[binary.I32Load8U] = i32Load8U
-	instTable[binary.I32Load16S] = i32Load16S
-	instTable[binary.I32Load16U] = i32Load16U
-	instTable[binary.I64Load8S] = i64Load8S
-	instTable[binary.I64Load8U] = i64Load8U
-	instTable[binary.I64Load16S] = i64Load16S
-	instTable[binary.I64Load16U] = i64Load16U
-	instTable[binary.I64Load32S] = i64Load32S
-	instTable[binary.I64Load32U] = i64Load32U
-	instTable[binary.I32Store] = i32Store
-	instTable[binary.I64Store] = i64Store
-	instTable[binary.F32Store] = f32Store
-	instTable[binary.F64Store] = f64Store
-	instTable[binary.I32Store8] = i32Store8
-	instTable[binary.I32Store16] = i32Store16
-	instTable[binary.I64Store8] = i64Store8
-	instTable[binary.I64Store16] = i64Store16
-	instTable[binary.I64Store32] = i64Store32
-	instTable[binary.MemorySize] = memorySize
-	instTable[binary.MemoryGrow] = memoryGrow
+	instructionTable[binary.I32Load] = i32Load
+	instructionTable[binary.I64Load] = i64Load
+	instructionTable[binary.F32Load] = f32Load
+	instructionTable[binary.F64Load] = f64Load
+	instructionTable[binary.I32Load8S] = i32Load8S
+	instructionTable[binary.I32Load8U] = i32Load8U
+	instructionTable[binary.I32Load16S] = i32Load16S
+	instructionTable[binary.I32Load16U] = i32Load16U
+	instructionTable[binary.I64Load8S] = i64Load8S
+	instructionTable[binary.I64Load8U] = i64Load8U
+	instructionTable[binary.I64Load16S] = i64Load16S
+	instructionTable[binary.I64Load16U] = i64Load16U
+	instructionTable[binary.I64Load32S] = i64Load32S
+	instructionTable[binary.I64Load32U] = i64Load32U
+	instructionTable[binary.I32Store] = i32Store
+	instructionTable[binary.I64Store] = i64Store
+	instructionTable[binary.F32Store] = f32Store
+	instructionTable[binary.F64Store] = f64Store
+	instructionTable[binary.I32Store8] = i32Store8
+	instructionTable[binary.I32Store16] = i32Store16
+	instructionTable[binary.I64Store8] = i64Store8
+	instructionTable[binary.I64Store16] = i64Store16
+	instructionTable[binary.I64Store32] = i64Store32
+	instructionTable[binary.MemorySize] = memorySize
+	instructionTable[binary.MemoryGrow] = memoryGrow
 
 	// 函数指令
-	instTable[binary.Call] = call // hack!
+	instructionTable[binary.Call] = call
 
+	// 变量指令
+	instructionTable[binary.LocalGet] = localGet
+	instructionTable[binary.LocalSet] = localSet
+	instructionTable[binary.LocalTee] = localTee
+	instructionTable[binary.GlobalGet] = globalGet
+	instructionTable[binary.GlobalSet] = globalSet
 }

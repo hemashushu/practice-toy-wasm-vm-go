@@ -81,9 +81,10 @@ func callInteralFunc(v *vm, func_idx int) { // name: callFunction
 	funcTypeIdx := v.module.FuncSec[func_idx]
 	funcType := v.module.TypeSec[funcTypeIdx]
 	code := v.module.CodeSec[func_idx]
+	expr := code.Expr
 
 	// 创建被进入新的调用帧
-	v.enterBlock(binary.Call, funcType, code.Expr)
+	v.enterBlock(binary.Call, funcType, expr)
 
 	// 分配局部变量空槽
 	localCount := int(code.GetLocalCount())
@@ -96,23 +97,23 @@ func callAssertFunc(v *vm, args interface{}) {
 	idx := args.(uint32)
 	switch v.module.ImportSec[idx].Name {
 	case "assert_true":
-		assertEq(v.operandStack.popBool(), true)
+		native_func_assertEq(v.operandStack.popBool(), true)
 	case "assert_false":
-		assertEq(v.operandStack.popBool(), false)
+		native_func_assertEq(v.operandStack.popBool(), false)
 	case "assert_eq_i32":
-		assertEq(v.operandStack.popU32(), v.operandStack.popU32())
+		native_func_assertEq(v.operandStack.popU32(), v.operandStack.popU32())
 	case "assert_eq_i64":
-		assertEq(v.operandStack.popU64(), v.operandStack.popU64())
+		native_func_assertEq(v.operandStack.popU64(), v.operandStack.popU64())
 	case "assert_eq_f32":
-		assertEq(v.operandStack.popF32(), v.operandStack.popF32())
+		native_func_assertEq(v.operandStack.popF32(), v.operandStack.popF32())
 	case "assert_eq_f64":
-		assertEq(v.operandStack.popF64(), v.operandStack.popF64())
+		native_func_assertEq(v.operandStack.popF64(), v.operandStack.popF64())
 	default:
 		panic("TODO")
 	}
 }
 
-func assertEq(a, b interface{}) {
+func native_func_assertEq(a, b interface{}) {
 	if a != b {
 		panic(fmt.Errorf("%v != %v", a, b))
 	}
