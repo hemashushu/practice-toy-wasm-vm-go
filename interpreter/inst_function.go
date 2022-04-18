@@ -1,7 +1,8 @@
 package interpreter
 
 import (
-	"fmt"
+	"errors"
+	"math"
 	"wasmvm/binary"
 )
 
@@ -67,20 +68,40 @@ import (
 // - f0  <-- 栈底
 //
 
+// -------- call 指令
+//
+// call func_idx:uint32
+//
+// 注
+// 函数索引值是包括 "导入的函数" 以及 "当前模块定义的函数（即内部函数）"，而且先计算
+// 导入的函数，比如一个模块有 3 个函数导入和 2 个内部函数，则第一个内部函数的索引值为 3。
+
 func call(v *vm, args interface{}) {
 	idx := int(args.(uint32))
-	importedFuncCount := len(v.module.ImportSec)
-	if idx < importedFuncCount {
-		callAssertFunc(v, args)
+	// importedFuncCount := len(v.module.ImportSec)
+	// if idx < importedFuncCount {
+	f := v.funcs[idx]
+	callFunc(v, f)
+}
+
+func callFunc(v *vm, f vmFunc) {
+	if f.goFunc != nil {
+		//callAssertFunc(v, args)
+		callExternalFunc(v, f)
 	} else {
-		callInteralFunc(v, idx-importedFuncCount)
+		// callInteralFunc(v, idx-importedFuncCount)
+		callInteralFunc(v, f)
 	}
 }
 
-func callInteralFunc(v *vm, func_idx int) { // name: callFunction
-	funcTypeIdx := v.module.FuncSec[func_idx]
-	funcType := v.module.TypeSec[funcTypeIdx]
-	code := v.module.CodeSec[func_idx]
+func callInteralFunc(v *vm, f vmFunc /* func_idx int*/) { // name: callFunction
+	// funcTypeIdx := v.module.FuncSec[func_idx]
+	// funcType := v.module.TypeSec[funcTypeIdx]
+	// code := v.module.CodeSec[func_idx]
+	// expr := code.Expr
+
+	funcType := f.type_
+	code := f.code
 	expr := code.Expr
 
 	// 创建被进入新的调用帧
@@ -93,28 +114,98 @@ func callInteralFunc(v *vm, func_idx int) { // name: callFunction
 	}
 }
 
-func callAssertFunc(v *vm, args interface{}) {
-	idx := args.(uint32)
-	switch v.module.ImportSec[idx].Name {
-	case "assert_true":
-		native_func_assertEq(v.operandStack.popBool(), true)
-	case "assert_false":
-		native_func_assertEq(v.operandStack.popBool(), false)
-	case "assert_eq_i32":
-		native_func_assertEq(v.operandStack.popU32(), v.operandStack.popU32())
-	case "assert_eq_i64":
-		native_func_assertEq(v.operandStack.popU64(), v.operandStack.popU64())
-	case "assert_eq_f32":
-		native_func_assertEq(v.operandStack.popF32(), v.operandStack.popF32())
-	case "assert_eq_f64":
-		native_func_assertEq(v.operandStack.popF64(), v.operandStack.popF64())
-	default:
-		panic("TODO")
+func callExternalFunc(v *vm, f vmFunc) {
+	args := popArgs(v, f.type_)
+	results := f.goFunc(args)
+	pushResults(v, f.type_, results)
+}
+
+func popArgs(v *vm, funcType binary.FuncType) []interface{} {
+	paramCount := len(funcType.ParamTypes)
+	args := make([]interface{}, paramCount)
+
+	// 注：
+	// 先弹出的参数放在参数列表的右边，或者说，
+	// 处于靠近栈顶的参数和返回值，放置在参数列表和返回值列表的
+	// 高端索引位置。
+	//
+	//示例：
+	// func (a,b,c) -> (x,y)
+	//
+	// --- 栈顶 ---    --- 栈顶 ---
+	// - c
+	// - b            - y
+	// - a            - x
+	// - ...          - ...
+	// --- 栈底 ---    --- 栈顶 ---
+
+	for i := paramCount - 1; i >= 0; i-- {
+		args[i] = wrapU64(funcType.ParamTypes[i], v.operandStack.popU64())
+	}
+	return args
+}
+
+func pushResults(v *vm, ft binary.FuncType, results []interface{}) {
+	if len(ft.ResultTypes) != len(results) {
+		panic(errors.New("incorrect length of return values"))
+	}
+	for _, result := range results {
+		v.operandStack.pushU64(unwrapU64(ft.ResultTypes[0], result))
 	}
 }
 
-func native_func_assertEq(a, b interface{}) {
-	if a != b {
-		panic(fmt.Errorf("%v != %v", a, b))
+func wrapU64(vt binary.ValType, val uint64) interface{} {
+	switch vt {
+	case binary.ValTypeI32:
+		return int32(val)
+	case binary.ValTypeI64:
+		return int64(val)
+	case binary.ValTypeF32:
+		return math.Float32frombits(uint32(val))
+	case binary.ValTypeF64:
+		return math.Float64frombits(val)
+	default:
+		panic(errors.New("unreachable")) // TODO
 	}
+}
+
+func unwrapU64(vt binary.ValType, val interface{}) uint64 {
+	switch vt {
+	case binary.ValTypeI32:
+		return uint64(val.(int32))
+	case binary.ValTypeI64:
+		return uint64(val.(int64))
+	case binary.ValTypeF32:
+		return uint64(math.Float32bits(val.(float32)))
+	case binary.ValTypeF64:
+		return math.Float64bits(val.(float64))
+	default:
+		panic(errors.New("unreachable")) // TODO
+	}
+}
+
+// -------- call_indirect 间接函数调用
+//
+// call_indirect type_idx:uint32 table_idx:uint32
+//
+// 其中 table_idx 的值目前只能是 0
+//
+func callIndirect(v *vm, args interface{}) {
+	i := v.operandStack.popU32() // 读取目标表项的索引
+	if i >= v.table.Size() {
+		panic(errors.New("out of element range"))
+	}
+
+	f := v.table.GetElem(i)
+
+	// todo::
+	// 这里需要检查函数类型（函数的签名）是否匹配
+	// typeIdx := args.(uint32)
+	// funcType := v.module.TypeSec[typeIdx]
+	// if f.type_.GetSignature() != funcType.GetSignature() {
+	// 	panic(errors.New("function type mismatch in indirect call"))
+	// }
+	// call_indirect 指令的 type_idx 参数用于防止调用错了函数
+
+	callFunc(v, f)
 }

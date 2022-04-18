@@ -205,7 +205,7 @@ func truncSat(v *vm, args interface{}) {
 		val := truncSatU(v.operandStack.popF64(), 64)
 		v.operandStack.pushU64(val)
 	default:
-		panic("unreachable")
+		panic(errors.New("unreachable"))
 	}
 }
 

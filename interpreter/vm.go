@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"errors"
 	"wasmvm/binary"
 )
 
@@ -8,7 +9,12 @@ type vm struct {
 	operandStack operandStack
 	controlStack controlStack
 	module       binary.Module
-	memory       *memory
+	memory       *memory // 目前只允许定义一块内存
+	table        *table  // 目前只允许定义一张表
+
+	// 统一了模块内（用户自定义）函数和外部函数（本地函数/native function）
+	// 的总函数列表
+	funcs []vmFunc
 
 	// 全局变量表
 	globals []*globalVar
@@ -85,6 +91,10 @@ func (v *vm) initMem() {
 	// 当前 wasm 只支持创建一个内存块
 	if len(v.module.MemSec) != 0 {
 		v.memory = newMemory(v.module.MemSec[0])
+	} else {
+		if len(v.module.DataSec) > 0 {
+			panic(errors.New("memory not defined"))
+		}
 	}
 
 	// 读取 Data 段，初始化内存块的内容
@@ -104,10 +114,79 @@ func (v *vm) initMemWithInitData(init_data []byte) {
 	v.memory = newMemoryWithInitData(init_data)
 }
 
+func (v *vm) initFuncs() {
+	v.linkNativeFuncs()
+	for i, ftIdx := range v.module.FuncSec {
+		ft := v.module.TypeSec[ftIdx]
+		code := v.module.CodeSec[i]
+		v.funcs = append(v.funcs, newInternalFunc(ft, code))
+	}
+}
+
+func (v *vm) linkNativeFuncs() {
+	for _, imp := range v.module.ImportSec {
+		if imp.Desc.Tag == binary.ImportTagFunc &&
+			imp.Module == "env" {
+			ft := v.module.TypeSec[imp.Desc.FuncType]
+			switch imp.Name {
+			case "print_char":
+				v.funcs = append(v.funcs, newExternalFunc(ft, printChar))
+			case "print_int":
+				v.funcs = append(v.funcs, newExternalFunc(ft, printInt))
+			case "add_i32":
+				v.funcs = append(v.funcs, newExternalFunc(ft, add_i32))
+			default:
+				panic(errors.New("TODO"))
+			}
+		}
+	}
+}
+
+func (v *vm) initTable() {
+	// 当前 wasm 只支持创建一张表
+	if len(v.module.TableSec) != 0 {
+		v.table = newTable(v.module.TableSec[0])
+	} else {
+		if len(v.module.ElemSec) > 0 {
+			panic(errors.New("table not defined"))
+		}
+	}
+
+	for _, elem := range v.module.ElemSec {
+
+		// 执行偏移值表达式（通常是一个 i32.const 指令）
+		for _, offsetInst := range elem.Offset {
+			v.execInstruction(offsetInst)
+		}
+
+		offset := v.operandStack.popU32()
+		for idx, funcIdx := range elem.Init {
+			v.table.SetElem(offset+uint32(idx), v.funcs[funcIdx])
+		}
+	}
+}
+
+// 执行 `start 段` 指定的函数
+func ExecStartFunc(module binary.Module) {
+	// 导入函数也会占用函数索引
+	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec))
+	TestFunc(module, func_idx)
+}
+
+// 执行名字为 `main` 的函数
 func ExecMainFunc(module binary.Module) {
-	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec)) // 导入函数也会占用函数索引
-	v := &vm{module: module}
-	v.execFunc(func_idx)
+	func_idx := getMainFunc(module)
+	TestFunc(module, func_idx)
+}
+
+func getMainFunc(module binary.Module) uint32 {
+	for _, exp := range module.ExportSec {
+		if exp.Desc.Tag == binary.ImportTagFunc &&
+			exp.Name == "main" {
+			return exp.Desc.Idx
+		}
+	}
+	panic(errors.New("no function named \"main\""))
 }
 
 // 执行指定函数
@@ -115,6 +194,8 @@ func ExecMainFunc(module binary.Module) {
 func TestFunc(module binary.Module, func_idx uint32) ([]uint64, []byte) {
 	v := &vm{module: module}
 	v.initMem()
+	v.initFuncs()
+	v.initTable()
 	v.execFunc(func_idx)
 	return v.operandStack.slots, dumpMemory(v.memory)
 }
@@ -122,6 +203,8 @@ func TestFunc(module binary.Module, func_idx uint32) ([]uint64, []byte) {
 func TestFuncWithInitMemoryData(module binary.Module, init_data []byte, func_idx uint32) ([]uint64, []byte) {
 	v := &vm{module: module}
 	v.initMemWithInitData(init_data)
+	v.initFuncs()
+	v.initTable()
 	v.execFunc(func_idx)
 	return v.operandStack.slots, dumpMemory(v.memory)
 }
@@ -351,6 +434,7 @@ func init() {
 
 	// 函数指令
 	instructionTable[binary.Call] = call
+	instructionTable[binary.CallIndirect] = callIndirect
 
 	// 变量指令
 	instructionTable[binary.LocalGet] = localGet

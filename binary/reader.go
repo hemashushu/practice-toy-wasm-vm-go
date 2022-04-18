@@ -333,6 +333,10 @@ func (r *wasmReader) readLimits() Limits {
 	if limits.Tag == 1 {
 		limits.Max = r.readVarU32()
 	}
+
+	// 当 tag == 0 时，max 值为 0，表示
+	// 没限制（实际上内存和表项都有上限）
+
 	return limits
 }
 

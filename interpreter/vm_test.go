@@ -278,6 +278,24 @@ func TestInstControl(t *testing.T) {
 	assert.AssertSliceEqual(t, []uint64{1}, runFuncAndGetStack("test-vm-control.wasm", 10))
 }
 
+func TestNativeFunction(t *testing.T) {
+	// 测试调用本地函数（native function）
+
+	// 导入了 3 个 native function，所以内部函数的
+	// 索引值从 3 开始。
+	runFunc("test-vm-native-function.wasm", 3) // 用人类的眼睛观察输出窗口是否输出 "A"
+	runFunc("test-vm-native-function.wasm", 4) // 用人类的眼睛观察输出窗口是否输出 "65"
+
+	assert.AssertSliceEqual(t, []uint64{33}, runFuncAndGetStack("test-vm-native-function.wasm", 5))
+}
+
+func TestInstCallIndirect(t *testing.T) {
+	assert.AssertSliceEqual(t, []uint64{12}, runFuncAndGetStack("test-vm-indirect-call.wasm", 0))
+	assert.AssertSliceEqual(t, []uint64{8}, runFuncAndGetStack("test-vm-indirect-call.wasm", 1))
+	assert.AssertSliceEqual(t, []uint64{20}, runFuncAndGetStack("test-vm-indirect-call.wasm", 2))
+	assert.AssertSliceEqual(t, []uint64{5}, runFuncAndGetStack("test-vm-indirect-call.wasm", 3))
+}
+
 func assertPartialMemoryData(t *testing.T, expected []byte, actual []byte) {
 	partial := make([]byte, len(expected))
 	copy(partial, actual)

@@ -34,26 +34,28 @@ func (m *memory) Size() uint32 {
 }
 
 // 扩充内存大小（在内存块的 max 允许的范围之内）
-// 参数 inc: 需要增加的页面数，而不是 `增加到` 的页面数
+// 参数 increaseCount: 需要增加的页面数，而不是 `增加到` 的页面数
 // 返回旧的页面数（uint32）
-func (m *memory) Grow(inc uint32) uint32 {
+func (m *memory) Grow(increaseCount uint32) uint32 {
 	previousSize := m.Size()
-	if inc == 0 {
+	if increaseCount == 0 {
 		return previousSize
 	}
 
+	// 如果不指定 max 值，则可以增长到最大允许的页面数 MaxPageCount
 	maxPages := uint32(binary.MaxPageCount)
+
 	if m.type_.Max > 0 {
 		maxPages = m.type_.Max
 	}
 
-	if previousSize+inc > maxPages {
+	if previousSize+increaseCount > maxPages {
 		// 失败则返回 -1
 		n1 := -1
 		return uint32(n1)
 	}
 
-	newData := make([]byte, (previousSize+inc)*binary.PageSize)
+	newData := make([]byte, (previousSize+increaseCount)*binary.PageSize)
 	copy(newData, m.data)
 	m.data = newData
 
