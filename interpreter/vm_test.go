@@ -255,9 +255,27 @@ func TestInstFunctionCall(t *testing.T) {
 }
 
 func TestInstControl(t *testing.T) {
+	// 测试 return
 	assert.AssertSliceEqual(t, []uint64{1}, runFuncAndGetStack("test-vm-control.wasm", 0))
 	assert.AssertSliceEqual(t, []uint64{2}, runFuncAndGetStack("test-vm-control.wasm", 1))
 	assert.AssertSliceEqual(t, []uint64{3}, runFuncAndGetStack("test-vm-control.wasm", 2))
+
+	// 测试 br
+	assert.AssertSliceEqual(t, []uint64{4}, runFuncAndGetStack("test-vm-control.wasm", 3))
+	assert.AssertSliceEqual(t, []uint64{2}, runFuncAndGetStack("test-vm-control.wasm", 4))
+	assert.AssertSliceEqual(t, []uint64{11}, runFuncAndGetStack("test-vm-control.wasm", 5))
+	assert.AssertSliceEqual(t, []uint64{12}, runFuncAndGetStack("test-vm-control.wasm", 6))
+	assert.AssertSliceEqual(t, []uint64{13}, runFuncAndGetStack("test-vm-control.wasm", 7))
+
+	// 测试 br_if
+	assert.AssertSliceEqual(t, []uint64{55}, runFuncAndGetStack("test-vm-control.wasm", 8))
+
+	// 测试 br_table
+	// todo::
+
+	// 测试 if
+	assert.AssertSliceEqual(t, []uint64{2}, runFuncAndGetStack("test-vm-control.wasm", 9))
+	assert.AssertSliceEqual(t, []uint64{1}, runFuncAndGetStack("test-vm-control.wasm", 10))
 }
 
 func assertPartialMemoryData(t *testing.T, expected []byte, actual []byte) {
