@@ -9,7 +9,8 @@ type Module interface {
 	GetMember(name string) interface{} // name: getExportItem
 
 	// 辅助函数
-	InvokeFunc(name string, args ...WasmVal) []WasmVal
+	EvalFunc(name string, args ...WasmVal) []WasmVal
+
 	GetGlobalVal(name string) WasmVal
 	SetGlobalVal(name string, value WasmVal)
 }

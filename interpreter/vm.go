@@ -220,32 +220,12 @@ func (v *vm) initMemWithInitData(init_data []byte) {
 }
 
 func (v *vm) initFuncs() {
-	// v.linkNativeFuncs()
 	for i, ftIdx := range v.module.FuncSec {
 		funcType := v.module.TypeSec[ftIdx]
 		code := v.module.CodeSec[i]
 		v.funcs = append(v.funcs, newInternalFunc(v, funcType, code))
 	}
 }
-
-// func (v *vm) linkNativeFuncs() {
-// 	// for _, imp := range v.module.ImportSec {
-// 	// 	if imp.Desc.Tag == binary.ImportTagFunc &&
-// 	// 		imp.Module == "env" {
-// 	// 		ft := v.module.TypeSec[imp.Desc.FuncType]
-// 	// 		switch imp.Name {
-// 	// 		case "print_char":
-// 	// 			v.funcs = append(v.funcs, newExternalFunc(ft, printChar))
-// 	// 		case "print_int":
-// 	// 			v.funcs = append(v.funcs, newExternalFunc(ft, printInt))
-// 	// 		case "add_i32":
-// 	// 			v.funcs = append(v.funcs, newExternalFunc(ft, add_i32))
-// 	// 		default:
-// 	// 			panic(errors.New("TODO"))
-// 	// 		}
-// 	// 	}
-// 	// }
-// }
 
 func (v *vm) initTable() {
 	// 当前 wasm 只支持创建一张表
@@ -427,7 +407,7 @@ func (vm *vm) GetMember(name string) interface{} {
 	return nil
 }
 
-func (vm *vm) InvokeFunc(name string, args ...instance.WasmVal) []instance.WasmVal {
+func (vm *vm) EvalFunc(name string, args ...instance.WasmVal) []instance.WasmVal {
 	m := vm.GetMember(name)
 	if m != nil {
 		if f, ok := m.(instance.Function); ok {

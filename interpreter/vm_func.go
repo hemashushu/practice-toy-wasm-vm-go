@@ -20,7 +20,7 @@ type vmFunc struct {
 	vm   *vm
 
 	// goFunc GoFunc          // 本地函数（native function）
-	func_ instance.Function
+	func_ instance.Function // 外部函数，即从别的模块导入的函数
 }
 
 func newExternalFunc(
@@ -51,8 +51,7 @@ func (f vmFunc) Type() binary.FuncType {
 // name: CallFromHost
 func (f vmFunc) Eval(args ...instance.WasmVal) []instance.WasmVal {
 	if f.func_ != nil {
-		// 本地函数
-		// native function
+		// 外部函数
 		return f.func_.Eval(args...)
 	} else {
 		// 模块内部函数

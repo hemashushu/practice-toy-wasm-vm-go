@@ -269,17 +269,6 @@ func TestInstControl(t *testing.T) {
 	assert.AssertListEqual(t, wrapList([]int32{1}), testFuncWithoutArgs("test-vm-control.wasm", 10))
 }
 
-// func TestNativeFunction(t *testing.T) {
-// 	// 测试调用本地函数（native function）
-//
-// 	// // 导入了 3 个 native function，所以内部函数的
-// 	// // 索引值从 3 开始。
-// 	// runFunc("test-vm-native-function.wasm", 3) // 用人类的眼睛观察输出窗口是否输出 "A"
-// 	// runFunc("test-vm-native-function.wasm", 4) // 用人类的眼睛观察输出窗口是否输出 "65"
-//
-// 	assert.AssertListEqual(t, wrapList([]int32{33}, testFuncWithoutArgs("test-vm-native-function.wasm", 1))
-// }
-
 func TestInstCallIndirect(t *testing.T) {
 	assert.AssertListEqual(t, wrapList([]int32{12}), testFuncWithoutArgs("test-vm-indirect-call.wasm", 0))
 	assert.AssertListEqual(t, wrapList([]int32{8}), testFuncWithoutArgs("test-vm-indirect-call.wasm", 1))
