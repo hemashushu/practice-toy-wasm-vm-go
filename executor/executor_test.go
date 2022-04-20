@@ -15,10 +15,38 @@ func TestNativeFunction(t *testing.T) {
 		wrapList([]int32{33}), testFunc("test-executor-native-function.wasm", "test_add", nil))
 }
 
+func TestMultipleModules(t *testing.T) {
+	assert.AssertListEqual(t,
+		wrapList([]int32{77}),
+		testFuncWithMultipleModules([]string{"lib", "app"}, "app", "test_add", nil))
+
+	assert.AssertListEqual(t,
+		wrapList([]int32{33}),
+		testFuncWithMultipleModules([]string{"lib", "app"}, "app", "test_sub", nil))
+}
+
 func testFunc(fileName string, funcName string, args []instance.WasmVal) []instance.WasmVal {
 	m := readModule(fileName)
-	mod := newModule(m)
+	mod := NewModule(m)
 	return mod.EvalFunc(funcName, args...)
+}
+
+func testFuncWithMultipleModules(
+	moduleNames []string,
+	targetModuleName string,
+	targetFuncName string,
+	args []instance.WasmVal) []instance.WasmVal {
+
+	ms := []binary.Module{}
+	for _, n := range moduleNames {
+		fileName := "test-module-" + n + ".wasm"
+		m := readModule(fileName)
+		ms = append(ms, m)
+	}
+
+	mods := NewModules(moduleNames, ms)
+	mod := mods[targetModuleName]
+	return mod.EvalFunc(targetFuncName, args...)
 }
 
 func readModule(fileName string) binary.Module {

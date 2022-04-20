@@ -50,7 +50,7 @@
 
 示例：
 
-`$ go run . examples/01-hello.wasm hello`
+`$ go run . examples/03-simple.wasm main`
 
 如无意外，应该能看到输出 `3`。
 

@@ -7,11 +7,11 @@ import (
 	"wasmvm/native"
 )
 
-func newModule(m binary.Module) instance.Module {
-	return newModules([]string{"user"}, []binary.Module{m})["user"]
+func NewModule(m binary.Module) instance.Module {
+	return NewModules([]string{"user"}, []binary.Module{m})["user"]
 }
 
-func newModules(names []string, ms []binary.Module) map[string]instance.Module {
+func NewModules(names []string, ms []binary.Module) map[string]instance.Module {
 	moduleMap := map[string]instance.Module{}
 	moduleMap["env"] = native.NewEnvModule()
 

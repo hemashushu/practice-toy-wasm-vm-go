@@ -74,7 +74,7 @@ import (
 // 注
 // 函数索引值是包括 "导入的函数" 以及 "当前模块定义的函数（即内部函数）"，而且先计算
 // 导入的函数，比如一个模块有 3 个函数导入和 2 个内部函数，则第一个内部函数的索引值为 3。
-
+//
 // call(vm, args) 函数仅仅创建了一个调用帧，并不会自动开始
 // 执行函数当中的指令（字节码）
 func call(v *vm, args interface{}) {
@@ -82,6 +82,8 @@ func call(v *vm, args interface{}) {
 	f := v.funcs[idx]
 	callFunc(v, f)
 }
+
+// 辅助函数
 
 func callFunc(v *vm, f vmFunc) {
 	// if f.goFunc != nil {
@@ -190,6 +192,7 @@ func callIndirect(v *vm, args interface{}) {
 		}
 	}
 
+	// 目标函数是外部函数
 	fcArgs := popArgs(v, funcType)
 	results := f.Eval(fcArgs...)
 	pushResults(v, funcType, results)

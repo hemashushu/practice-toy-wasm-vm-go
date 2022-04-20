@@ -48,6 +48,7 @@ func (f vmFunc) Type() binary.FuncType {
 	return f.type_
 }
 
+// 从 vm 外部调用模块内部的函数
 // name: CallFromHost
 func (f vmFunc) Eval(args ...instance.WasmVal) []instance.WasmVal {
 	if f.func_ != nil {
@@ -59,7 +60,7 @@ func (f vmFunc) Eval(args ...instance.WasmVal) []instance.WasmVal {
 	}
 }
 
-// 从 vm 外部调用模块内部的函数
+// 从 vm 外部调用模块内部的函数（内部使用）
 func (f vmFunc) eval(args []interface{}) []interface{} {
 	pushArgs(f.vm, f.type_, args)
 	callFunc(f.vm, f)

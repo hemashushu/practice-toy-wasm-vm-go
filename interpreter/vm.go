@@ -278,6 +278,7 @@ func (v *vm) initGlobals() {
 // 	TestFunc(module, func_idx)
 // }
 
+// todo:: 可以删除此方法
 func (v *vm) execStartFunc() {
 	if idx := getStartFuncIdx(v); idx != -1 {
 		//v.funcs[idx].call(nil)
@@ -290,13 +291,7 @@ func (v *vm) execStartFunc() {
 	}
 }
 
-// 执行指定函数
-func (v *vm) evalFunc(func_idx uint32, args []interface{}) []interface{} {
-	// call(v, func_idx)
-	// v.loop()
-	return v.funcs[func_idx].eval(args)
-}
-
+// todo:: 可以删除此方法
 func getStartFuncIdx(v *vm) int32 {
 	if v.module.StartSec != nil {
 		return int32(*v.module.StartSec)
@@ -305,6 +300,7 @@ func getStartFuncIdx(v *vm) int32 {
 	}
 }
 
+// todo:: 可以删除此方法
 func getMainFuncIdx(v *vm) int32 {
 	for _, exp := range v.module.ExportSec {
 		if exp.Desc.Tag == binary.ImportTagFunc &&
@@ -316,8 +312,17 @@ func getMainFuncIdx(v *vm) int32 {
 	return -1
 }
 
+// todo:: 用于单元测试
+// 执行指定函数（内部使用）
+func (v *vm) evalFunc(func_idx uint32, args []interface{}) []interface{} {
+	// call(v, func_idx)
+	// v.loop()
+	return v.funcs[func_idx].eval(args)
+}
+
+// todo:: 用于单元测试
 // 执行指定函数
-// 返回操作数栈和内容的内容，用于测试
+// 返回操作数栈和内容的内容，
 func evalModuleFunc(module binary.Module, func_idx uint32, args []interface{}) []interface{} {
 	// v := &vm{module: module}
 	// v.initMem()
@@ -329,6 +334,7 @@ func evalModuleFunc(module binary.Module, func_idx uint32, args []interface{}) [
 	// return v.operandStack.slots, dumpMemory(v.memory)
 }
 
+// todo:: 用于单元测试
 func evalModuleFuncWithInitMemoryData(module binary.Module, init_memory_data []byte, func_idx uint32, args []interface{}) []interface{} {
 	// v := &vm{module: module}
 	// v.initMemWithInitData(init_data)
@@ -340,6 +346,7 @@ func evalModuleFuncWithInitMemoryData(module binary.Module, init_memory_data []b
 	// return v.operandStack.slots, dumpMemory(v.memory)
 }
 
+// todo:: 用于单元测试
 func evalModuleFuncAndDumpMemory(module binary.Module, func_idx uint32, args []interface{}) ([]interface{}, []byte) {
 	// v := &vm{module: module}
 	// v.initMem()
@@ -351,6 +358,7 @@ func evalModuleFuncAndDumpMemory(module binary.Module, func_idx uint32, args []i
 	// return v.operandStack.slots, dumpMemory(v.memory)
 }
 
+// todo:: 用于单元测试
 func dumpMemory(m instance.Memory) []byte {
 	if m == nil {
 		return []byte{}
@@ -366,12 +374,12 @@ func (v *vm) loop() {
 
 	// 程序的入口是一个模块内部的用户自定义函数，调用 call 方法之后，控制栈
 	// 应该有 1 个栈帧，所以这里的 depth 值为 1
-	// todo::
-	// 按理说下面的循环可以简化成
-	// `for v.controlStack.controlDepth()  >= 1 {`
 
-	depth := v.controlStack.controlDepth()
-	for v.controlStack.controlDepth() >= depth {
+	// 当一个函数调用外面的函数，然后又再次调用回当前 vm 的其他函数时，loop()
+	// 方法会再次被激活，此时的 depth 的初始值就不是 1
+
+	startDepth := v.controlStack.controlDepth()
+	for v.controlStack.controlDepth() >= startDepth {
 		frame := v.controlStack.topControlFrame()
 		if frame.pc == len(frame.instructions) {
 			v.exitBlock()
