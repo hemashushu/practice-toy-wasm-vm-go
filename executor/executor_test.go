@@ -9,20 +9,25 @@ import (
 	"wasmvm/instance"
 )
 
+// 测试调用本地函数（native function）
 func TestNativeFunction(t *testing.T) {
-	// 测试调用本地函数（native function）
 	assert.AssertListEqual(t,
 		wrapList([]int32{33}), testFunc("test-executor-native-function.wasm", "test_add", nil))
 }
 
+// 测试多个模块链接及调用
 func TestMultipleModules(t *testing.T) {
 	assert.AssertListEqual(t,
 		wrapList([]int32{77}),
-		testFuncWithMultipleModules([]string{"lib", "app"}, "app", "test_add", nil))
+		testFuncWithMultipleModules(
+			[]string{"lib", "app"},
+			"app", "test_add", nil))
 
 	assert.AssertListEqual(t,
 		wrapList([]int32{33}),
-		testFuncWithMultipleModules([]string{"lib", "app"}, "app", "test_sub", nil))
+		testFuncWithMultipleModules(
+			[]string{"lib", "app"},
+			"app", "test_sub", nil))
 }
 
 func testFunc(fileName string, funcName string, args []instance.WasmVal) []instance.WasmVal {
