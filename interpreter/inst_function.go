@@ -2,7 +2,6 @@ package interpreter
 
 import (
 	"errors"
-	"math"
 	"wasmvm/binary"
 )
 
@@ -76,25 +75,24 @@ import (
 // 函数索引值是包括 "导入的函数" 以及 "当前模块定义的函数（即内部函数）"，而且先计算
 // 导入的函数，比如一个模块有 3 个函数导入和 2 个内部函数，则第一个内部函数的索引值为 3。
 
+// call(vm, args) 函数仅仅创建了一个调用帧，并不会自动开始
+// 执行函数当中的指令（字节码）
 func call(v *vm, args interface{}) {
 	idx := int(args.(uint32))
-	// importedFuncCount := len(v.module.ImportSec)
-	// if idx < importedFuncCount {
 	f := v.funcs[idx]
 	callFunc(v, f)
 }
 
 func callFunc(v *vm, f vmFunc) {
-	if f.goFunc != nil {
-		//callAssertFunc(v, args)
+	// if f.goFunc != nil {
+	if f.func_ != nil {
 		callExternalFunc(v, f)
 	} else {
-		// callInteralFunc(v, idx-importedFuncCount)
-		callInteralFunc(v, f)
+		callInternalFunc(v, f)
 	}
 }
 
-func callInteralFunc(v *vm, f vmFunc /* func_idx int*/) { // name: callFunction
+func callInternalFunc(v *vm, f vmFunc /* func_idx int*/) { // name: callFunction
 	// funcTypeIdx := v.module.FuncSec[func_idx]
 	// funcType := v.module.TypeSec[funcTypeIdx]
 	// code := v.module.CodeSec[func_idx]
@@ -116,7 +114,7 @@ func callInteralFunc(v *vm, f vmFunc /* func_idx int*/) { // name: callFunction
 
 func callExternalFunc(v *vm, f vmFunc) {
 	args := popArgs(v, f.type_)
-	results := f.goFunc(args)
+	results := f.func_.Eval(args...)
 	pushResults(v, f.type_, results)
 }
 
@@ -125,12 +123,16 @@ func popArgs(v *vm, funcType binary.FuncType) []interface{} {
 	args := make([]interface{}, paramCount)
 
 	// 注：
-	// 先弹出的参数放在参数列表的右边，或者说，
-	// 处于靠近栈顶的参数和返回值，放置在参数列表和返回值列表的
-	// 高端索引位置。
+	// 这是从模块内部函数调用外部函数的过程。
 	//
-	//示例：
-	// func (a,b,c) -> (x,y)
+	// 先弹出的参数放在参数列表的右边（大索引端）
+	// 对于返回值，左边（小索引端）的数值先压入。
+	//
+	// 示例：
+	// external function
+	// extf (a,b,c) -> (x,y)
+	//       ^ ^ ^      | |
+	//       | | |      V V
 	//
 	// --- 栈顶 ---    --- 栈顶 ---
 	// - c
@@ -154,36 +156,6 @@ func pushResults(v *vm, ft binary.FuncType, results []interface{}) {
 	}
 }
 
-func wrapU64(vt binary.ValType, val uint64) interface{} {
-	switch vt {
-	case binary.ValTypeI32:
-		return int32(val)
-	case binary.ValTypeI64:
-		return int64(val)
-	case binary.ValTypeF32:
-		return math.Float32frombits(uint32(val))
-	case binary.ValTypeF64:
-		return math.Float64frombits(val)
-	default:
-		panic(errors.New("unreachable")) // TODO
-	}
-}
-
-func unwrapU64(vt binary.ValType, val interface{}) uint64 {
-	switch vt {
-	case binary.ValTypeI32:
-		return uint64(val.(int32))
-	case binary.ValTypeI64:
-		return uint64(val.(int64))
-	case binary.ValTypeF32:
-		return uint64(math.Float32bits(val.(float32)))
-	case binary.ValTypeF64:
-		return math.Float64bits(val.(float64))
-	default:
-		panic(errors.New("unreachable")) // TODO
-	}
-}
-
 // -------- call_indirect 间接函数调用
 //
 // call_indirect type_idx:uint32 table_idx:uint32
@@ -198,14 +170,27 @@ func callIndirect(v *vm, args interface{}) {
 
 	f := v.table.GetElem(i)
 
+	typeIdx := args.(uint32)
+	funcType := v.module.TypeSec[typeIdx]
+
 	// todo::
 	// 这里需要检查函数类型（函数的签名）是否匹配
-	// typeIdx := args.(uint32)
-	// funcType := v.module.TypeSec[typeIdx]
 	// if f.type_.GetSignature() != funcType.GetSignature() {
 	// 	panic(errors.New("function type mismatch in indirect call"))
 	// }
 	// call_indirect 指令的 type_idx 参数用于防止调用错了函数
 
-	callFunc(v, f)
+	// callFunc(v, f)
+
+	// 检查是否同一个模块里的内部函数
+	if vf, ok := f.(vmFunc); ok {
+		if vf.vm == v && vf.func_ == nil {
+			callInternalFunc(v, vf)
+			return
+		}
+	}
+
+	fcArgs := popArgs(v, funcType)
+	results := f.Eval(fcArgs...)
+	pushResults(v, funcType, results)
 }

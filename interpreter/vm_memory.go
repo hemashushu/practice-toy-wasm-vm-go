@@ -27,6 +27,11 @@ func newMemoryWithInitData(init_data []byte) *memory {
 	}
 }
 
+// 这是一个 Memory 接口需要的方法
+func (m *memory) Type() binary.MemType {
+	return m.type_
+}
+
 // 获取内存块的页面数
 // 返回当前的页面数（uint32）
 func (m *memory) Size() uint32 {
@@ -36,6 +41,7 @@ func (m *memory) Size() uint32 {
 // 扩充内存大小（在内存块的 max 允许的范围之内）
 // 参数 increaseCount: 需要增加的页面数，而不是 `增加到` 的页面数
 // 返回旧的页面数（uint32）
+// 失败时会返回被转为 uint32 的 -1
 func (m *memory) Grow(increaseCount uint32) uint32 {
 	previousSize := m.Size()
 	if increaseCount == 0 {

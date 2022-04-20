@@ -3,6 +3,7 @@ package interpreter
 import (
 	"errors"
 	"wasmvm/binary"
+	"wasmvm/instance"
 )
 
 type globalVar struct {
@@ -21,12 +22,21 @@ func (g *globalVar) Type() binary.GlobalType {
 	return g.type_
 }
 
-func (g *globalVar) GetAsU64() uint64 {
+func (g *globalVar) GetAsU64() uint64 { // 内部使用，name: GetRaw()
 	return g.val
 }
-func (g *globalVar) SetAsU64(val uint64) {
+
+func (g *globalVar) SetAsU64(val uint64) { // 内部使用，name: SetRaw(...)
 	if g.type_.Mut != 1 {
 		panic(errors.New("immutable global"))
 	}
 	g.val = val
+}
+
+func (g *globalVar) Get() instance.WasmVal {
+	return wrapU64(g.type_.ValType, g.val)
+}
+
+func (g *globalVar) Set(val instance.WasmVal) {
+	g.val = unwrapU64(g.type_.ValType, val)
 }

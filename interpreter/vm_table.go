@@ -3,6 +3,7 @@ package interpreter
 import (
 	"errors"
 	"wasmvm/binary"
+	"wasmvm/instance"
 )
 
 // 表段和元素段目前用于列出一组函数，然后在执行 `call_indirect` 指令时，根据栈顶
@@ -30,13 +31,22 @@ import (
 
 type table struct {
 	type_ binary.TableType // TableType 的信息包含表的类型（目前只有函数引用类型）以及限制值
-	elems []vmFunc
+	// elems []vmFunc
+	elems []instance.Function
+}
+
+func NewTable(min uint32, max uint32) instance.Table {
+	tableType := binary.TableType{
+		ElemType: binary.FuncRef,
+		Limits:   binary.Limits{Min: min, Max: max},
+	}
+	return newTable(tableType)
 }
 
 func newTable(tableType binary.TableType) *table {
 	return &table{
 		type_: tableType,
-		elems: make([]vmFunc, tableType.Limits.Min),
+		elems: make([]instance.Function, tableType.Limits.Min),
 	}
 }
 
@@ -56,16 +66,16 @@ func (t *table) Grow(increaseCount uint32) {
 		}
 	}
 
-	t.elems = append(t.elems, make([]vmFunc, increaseCount)...)
+	t.elems = append(t.elems, make([]instance.Function, increaseCount)...)
 }
 
-func (t *table) GetElem(idx uint32) vmFunc {
+func (t *table) GetElem(idx uint32) instance.Function {
 	t.checkIdx(idx)
 	elem := t.elems[idx]
 	return elem
 }
 
-func (t *table) SetElem(idx uint32, elem vmFunc) {
+func (t *table) SetElem(idx uint32, elem instance.Function) {
 	t.checkIdx(idx)
 	t.elems[idx] = elem
 }

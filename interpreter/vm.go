@@ -2,22 +2,25 @@ package interpreter
 
 import (
 	"errors"
+	"fmt"
 	"wasmvm/binary"
+	"wasmvm/instance"
 )
 
 type vm struct {
 	operandStack operandStack
 	controlStack controlStack
 	module       binary.Module
-	memory       *memory // 目前只允许定义一块内存
-	table        *table  // 目前只允许定义一张表
+
+	table  instance.Table  // 目前只允许定义一张表
+	memory instance.Memory // 目前只允许定义一块内存
 
 	// 统一了模块内（用户自定义）函数和外部函数（本地函数/native function）
 	// 的总函数列表
 	funcs []vmFunc
 
 	// 全局变量表
-	globals []*globalVar
+	globals []instance.Global
 
 	// 记录第一个局部变量（包括函数参数）在栈中的位置，用于
 	// 方便按索引访问栈中的局部变量，它的值等于从栈顶开始
@@ -87,6 +90,108 @@ type instructionExecFunc = func(v *vm, args interface{})
 // 指令的解析/执行函数表
 var instructionTable = make([]instructionExecFunc, 256)
 
+func NewModule(m binary.Module, mm map[string]instance.Module) instance.Module {
+	return newVM(m, mm)
+}
+
+func newVM(m binary.Module, mm map[string]instance.Module) *vm {
+	v := &vm{module: m}
+	v.linkImports(mm)
+	v.initFuncs()
+	v.initTable()
+	v.initMem()
+	v.initGlobals()
+	// v.execStartFunc()
+	// // v.execFunc(func_idx)
+	// // return v.operandStack.slots, dumpMemory(v.memory)
+	return v
+}
+
+func newVMWithInitMemoryData(m binary.Module, mm map[string]instance.Module, init_memory_data []byte) *vm {
+	v := &vm{module: m}
+	v.linkImports(mm)
+	v.initFuncs()
+	v.initTable()
+	v.initMemWithInitData(init_memory_data)
+	v.initGlobals()
+	return v
+}
+
+func (v *vm) linkImports(mm map[string]instance.Module) {
+	for _, importItem := range v.module.ImportSec {
+		if targetModule := mm[importItem.Module]; targetModule == nil {
+			panic(errors.New("module not found"))
+		} else {
+			v.linkImport(targetModule, importItem)
+		}
+	}
+}
+
+func (v *vm) linkImport(targetModule instance.Module, importItem binary.Import) {
+	targetExportedItem := targetModule.GetMember(importItem.Name)
+
+	if targetExportedItem == nil {
+		panic(fmt.Errorf("unknown import: %s.%s",
+			importItem.Module, importItem.Name))
+	}
+
+	// typeMatched := false
+	switch x := targetExportedItem.(type) {
+	case instance.Function:
+		if importItem.Desc.Tag == binary.ImportTagFunc {
+			expectedFuncType := v.module.TypeSec[importItem.Desc.FuncType]
+			// if !isFuncTypeMatch(expectedFuncType, x.Type()) {
+			// 	panic(fmt.Errorf("incompatible import type: %s.%s",
+			// 		importItem.Module, importItem.Name))
+			// }
+			v.funcs = append(v.funcs, newExternalFunc(expectedFuncType, x))
+		}
+	case instance.Table:
+		if importItem.Desc.Tag == binary.ImportTagTable {
+			// if !isLimitsMatch(importItem.Desc.Table.Limits, x.Type().Limits) {
+			// 	panic(fmt.Errorf("incompatible import type: %s.%s",
+			// 		importItem.Module, importItem.Name))
+			// }
+			v.table = x
+		}
+	case instance.Memory:
+		if importItem.Desc.Tag == binary.ImportTagMem {
+			// if !isLimitsMatch(importItem.Desc.Mem, x.Type()) {
+			// 	panic(fmt.Errorf("incompatible import type: %s.%s",
+			// 		importItem.Module, importItem.Name))
+			// }
+			v.memory = x
+		}
+	case instance.Global:
+		if importItem.Desc.Tag == binary.ImportTagGlobal {
+			// if !isGlobalTypeMatch(importItem.Desc.Global, x.Type()) {
+			// 	panic(fmt.Errorf("incompatible import type: %s.%s",
+			// 		importItem.Module, importItem.Name))
+			// }
+			v.globals = append(v.globals, x)
+		}
+	}
+
+	// if !typeMatched {
+	// 	panic(fmt.Errorf("incompatible import type: %s.%s",
+	// 		importItem.Module, importItem.Name))
+	// }
+}
+
+// func isFuncTypeMatch(expected, actual binary.FuncType) bool {
+// 	return fmt.Sprintf("%s", expected) == fmt.Sprintf("%s", actual)
+// }
+//
+// func isGlobalTypeMatch(expected, actual binary.GlobalType) bool {
+// 	return actual.ValType == expected.ValType &&
+// 		actual.Mut == expected.Mut
+// }
+//
+// func isLimitsMatch(expected, actual binary.Limits) bool {
+// 	return actual.Min >= expected.Min &&
+// 		(expected.Max == 0 || actual.Max > 0 && actual.Max <= expected.Max)
+// }
+
 func (v *vm) initMem() {
 	// 当前 wasm 只支持创建一个内存块
 	if len(v.module.MemSec) != 0 {
@@ -115,32 +220,32 @@ func (v *vm) initMemWithInitData(init_data []byte) {
 }
 
 func (v *vm) initFuncs() {
-	v.linkNativeFuncs()
+	// v.linkNativeFuncs()
 	for i, ftIdx := range v.module.FuncSec {
-		ft := v.module.TypeSec[ftIdx]
+		funcType := v.module.TypeSec[ftIdx]
 		code := v.module.CodeSec[i]
-		v.funcs = append(v.funcs, newInternalFunc(ft, code))
+		v.funcs = append(v.funcs, newInternalFunc(v, funcType, code))
 	}
 }
 
-func (v *vm) linkNativeFuncs() {
-	for _, imp := range v.module.ImportSec {
-		if imp.Desc.Tag == binary.ImportTagFunc &&
-			imp.Module == "env" {
-			ft := v.module.TypeSec[imp.Desc.FuncType]
-			switch imp.Name {
-			case "print_char":
-				v.funcs = append(v.funcs, newExternalFunc(ft, printChar))
-			case "print_int":
-				v.funcs = append(v.funcs, newExternalFunc(ft, printInt))
-			case "add_i32":
-				v.funcs = append(v.funcs, newExternalFunc(ft, add_i32))
-			default:
-				panic(errors.New("TODO"))
-			}
-		}
-	}
-}
+// func (v *vm) linkNativeFuncs() {
+// 	// for _, imp := range v.module.ImportSec {
+// 	// 	if imp.Desc.Tag == binary.ImportTagFunc &&
+// 	// 		imp.Module == "env" {
+// 	// 		ft := v.module.TypeSec[imp.Desc.FuncType]
+// 	// 		switch imp.Name {
+// 	// 		case "print_char":
+// 	// 			v.funcs = append(v.funcs, newExternalFunc(ft, printChar))
+// 	// 		case "print_int":
+// 	// 			v.funcs = append(v.funcs, newExternalFunc(ft, printInt))
+// 	// 		case "add_i32":
+// 	// 			v.funcs = append(v.funcs, newExternalFunc(ft, add_i32))
+// 	// 		default:
+// 	// 			panic(errors.New("TODO"))
+// 	// 		}
+// 	// 	}
+// 	// }
+// }
 
 func (v *vm) initTable() {
 	// 当前 wasm 只支持创建一张表
@@ -166,69 +271,118 @@ func (v *vm) initTable() {
 	}
 }
 
-// 执行 `start 段` 指定的函数
-func ExecStartFunc(module binary.Module) {
-	// 导入函数也会占用函数索引
-	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec))
-	TestFunc(module, func_idx)
+func (v *vm) initGlobals() {
+	for _, globalItem := range v.module.GlobalSec {
+		// v.execConstExpr(globalItem.Init)
+
+		// 执行常量表达式（通常是一个 i32.const 指令）
+		for _, initInst := range globalItem.Init {
+			v.execInstruction(initInst)
+		}
+
+		v.globals = append(v.globals,
+			newGlobal(globalItem.Type, v.operandStack.popU64()))
+	}
 }
 
-// 执行名字为 `main` 的函数
-func ExecMainFunc(module binary.Module) {
-	func_idx := getMainFunc(module)
-	TestFunc(module, func_idx)
+// // 执行 `start 段` 指定的函数
+// func ExecStartFunc(module binary.Module) {
+// 	// 导入函数也会占用函数索引
+// 	func_idx := uint32(*module.StartSec) - uint32(len(module.ImportSec))
+// 	TestFunc(module, func_idx)
+// }
+//
+// // 执行名字为 `main` 的函数
+// func ExecMainFunc(module binary.Module) {
+// 	func_idx := getMainFunc(module)
+// 	TestFunc(module, func_idx)
+// }
+
+func (v *vm) execStartFunc() {
+	if idx := getStartFuncIdx(v); idx != -1 {
+		//v.funcs[idx].call(nil)
+		v.evalFunc(uint32(idx), nil)
+	} else if idx := getMainFuncIdx(v); idx != -1 {
+		// v.funcs[idx].call(nil)
+		v.evalFunc(uint32(idx), nil)
+	} else {
+		panic(errors.New("no start function"))
+	}
 }
 
-func getMainFunc(module binary.Module) uint32 {
-	for _, exp := range module.ExportSec {
+// 执行指定函数
+func (v *vm) evalFunc(func_idx uint32, args []interface{}) []interface{} {
+	// call(v, func_idx)
+	// v.loop()
+	return v.funcs[func_idx].eval(args)
+}
+
+func getStartFuncIdx(v *vm) int32 {
+	if v.module.StartSec != nil {
+		return int32(*v.module.StartSec)
+	} else {
+		return -1
+	}
+}
+
+func getMainFuncIdx(v *vm) int32 {
+	for _, exp := range v.module.ExportSec {
 		if exp.Desc.Tag == binary.ImportTagFunc &&
 			exp.Name == "main" {
-			return exp.Desc.Idx
+			return int32(exp.Desc.Idx)
 		}
 	}
-	panic(errors.New("no function named \"main\""))
+	// panic(errors.New("no function named \"main\""))
+	return -1
 }
 
 // 执行指定函数
 // 返回操作数栈和内容的内容，用于测试
-func TestFunc(module binary.Module, func_idx uint32) ([]uint64, []byte) {
-	v := &vm{module: module}
-	v.initMem()
-	v.initFuncs()
-	v.initTable()
-	v.execFunc(func_idx)
-	return v.operandStack.slots, dumpMemory(v.memory)
+func evalModuleFunc(module binary.Module, func_idx uint32, args []interface{}) []interface{} {
+	// v := &vm{module: module}
+	// v.initMem()
+	// v.initFuncs()
+	// v.initTable()
+	// v.execFunc(func_idx)
+	v := newVM(module, nil)
+	return v.evalFunc(func_idx, args)
+	// return v.operandStack.slots, dumpMemory(v.memory)
 }
 
-func TestFuncWithInitMemoryData(module binary.Module, init_data []byte, func_idx uint32) ([]uint64, []byte) {
-	v := &vm{module: module}
-	v.initMemWithInitData(init_data)
-	v.initFuncs()
-	v.initTable()
-	v.execFunc(func_idx)
-	return v.operandStack.slots, dumpMemory(v.memory)
+func evalModuleFuncWithInitMemoryData(module binary.Module, init_memory_data []byte, func_idx uint32, args []interface{}) []interface{} {
+	// v := &vm{module: module}
+	// v.initMemWithInitData(init_data)
+	// v.initFuncs()
+	// v.initTable()
+	// v.execFunc(func_idx)
+	v := newVMWithInitMemoryData(module, nil, init_memory_data)
+	return v.evalFunc(func_idx, args)
+	// return v.operandStack.slots, dumpMemory(v.memory)
 }
 
-func dumpMemory(m *memory) []byte {
+func evalModuleFuncAndDumpMemory(module binary.Module, func_idx uint32, args []interface{}) ([]interface{}, []byte) {
+	// v := &vm{module: module}
+	// v.initMem()
+	// v.initFuncs()
+	// v.initTable()
+	// v.execFunc(func_idx)
+	v := newVM(module, nil)
+	return v.evalFunc(func_idx, args), dumpMemory(v.memory)
+	// return v.operandStack.slots, dumpMemory(v.memory)
+}
+
+func dumpMemory(m instance.Memory) []byte {
 	if m == nil {
 		return []byte{}
 	} else {
-		return m.data
+		// 因为 go 语言能够自动管理内存，所以嘛就偷懒一下，
+		// 并非真的克隆了一次内存
+		mm := m.(*memory)
+		return mm.data
 	}
 }
 
-// 执行指定函数
-func (v *vm) execFunc(func_idx uint32) {
-	//code := v.module.CodeSec[func_idx]
-	// for _, inst := range code.Expr {
-	// 	v.execInst(inst)
-	// }
-
-	call(v, func_idx)
-
-	// 	v.loop()
-	// }
-	// func (v *vm) loop() {
+func (v *vm) loop() {
 
 	// 程序的入口是一个模块内部的用户自定义函数，调用 call 方法之后，控制栈
 	// 应该有 1 个栈帧，所以这里的 depth 值为 1
@@ -252,6 +406,55 @@ func (v *vm) execFunc(func_idx uint32) {
 // 执行一条指令
 func (v *vm) execInstruction(inst binary.Instruction) {
 	instructionTable[inst.Opcode](v, inst.Args)
+}
+
+func (vm *vm) GetMember(name string) interface{} {
+	for _, exp := range vm.module.ExportSec {
+		if exp.Name == name {
+			idx := exp.Desc.Idx
+			switch exp.Desc.Tag {
+			case binary.ExportTagFunc:
+				return vm.funcs[idx]
+			case binary.ExportTagTable:
+				return vm.table
+			case binary.ExportTagMem:
+				return vm.memory
+			case binary.ExportTagGlobal:
+				return vm.globals[idx]
+			}
+		}
+	}
+	return nil
+}
+
+func (vm *vm) InvokeFunc(name string, args ...instance.WasmVal) []instance.WasmVal {
+	m := vm.GetMember(name)
+	if m != nil {
+		if f, ok := m.(instance.Function); ok {
+			return f.Eval(args...)
+		}
+	}
+	panic(fmt.Errorf("function not found: " + name))
+}
+
+func (vm vm) GetGlobalVal(name string) instance.WasmVal {
+	m := vm.GetMember(name)
+	if m != nil {
+		if g, ok := m.(instance.Global); ok {
+			return g.Get()
+		}
+	}
+	panic(errors.New("global not found: " + name))
+}
+
+func (vm vm) SetGlobalVal(name string, val instance.WasmVal) {
+	m := vm.GetMember(name)
+	if m != nil {
+		if g, ok := m.(instance.Global); ok {
+			g.Set(val)
+		}
+	}
+	panic(errors.New("global not found: " + name))
 }
 
 func init() {
